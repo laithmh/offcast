@@ -77,20 +77,20 @@ void main() {
   });
 
   group('WebRTCConstants & Candidate Sanitizer Tests', () {
-    test('Verify screen constraints and zero-audio configuration', () {
+    test('Verify screen constraints configuration', () {
       expect(WebRTCConstants.displayMediaConstraints['audio'], false);
       expect(WebRTCConstants.displayMediaConstraints['video'], isNotNull);
     });
 
     test('Verify quality preset constraint configurations', () {
-      final ultraConstraints = WebRTCConstants.getDisplayMediaConstraints(
-        preset: StreamingQualityPreset.ultra1080p60,
+      final perfConstraints = WebRTCConstants.getDisplayMediaConstraints(
+        preset: StreamingQualityPreset.performance540p60,
       );
-      final mandatory = (ultraConstraints['video'] as Map)['mandatory'] as Map;
-      expect(mandatory['minFrameRate'], '60');
-      expect(mandatory['maxFrameRate'], '60');
+      final mandatory = (perfConstraints['video'] as Map)['mandatory'] as Map;
+      expect(mandatory['maxWidth'], 540);
+      expect(mandatory['maxFrameRate'], 60);
 
-      final perfStats = const StreamPerformanceStats(
+      const perfStats = StreamPerformanceStats(
         fps: 59.8,
         latencyMs: 4,
         bitrateMbps: 8.2,

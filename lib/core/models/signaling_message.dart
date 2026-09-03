@@ -16,7 +16,10 @@ class SignalingMessage {
   });
 
   factory SignalingMessage.offer(String sdp) {
-    return SignalingMessage(type: 'offer', sdp: sdp);
+    return SignalingMessage(
+      type: 'offer',
+      sdp: sdp,
+    );
   }
 
   factory SignalingMessage.answer(String sdp) {
@@ -57,6 +60,21 @@ class SignalingMessage {
         'width': width,
         'height': height,
         'rotation': rotation,
+      },
+    );
+  }
+
+  factory SignalingMessage.thermalTelemetry({
+    required double? temperatureC,
+    required String thermalStatus,
+    String? deviceName,
+  }) {
+    return SignalingMessage(
+      type: 'thermal_telemetry',
+      payload: {
+        'temperatureC': temperatureC,
+        'thermalStatus': thermalStatus,
+        'deviceName': deviceName,
       },
     );
   }

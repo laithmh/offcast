@@ -7,6 +7,7 @@ import '../../../core/constants/webrtc_constants.dart';
 import '../../../core/models/signaling_message.dart';
 import '../../../core/network/discovery_beacon.dart';
 import '../../../core/network/local_udp_relay.dart';
+import '../../../core/services/foreground_service_helper.dart';
 import 'embedded_signaling_server.dart';
 
 class ReceiverWebRTCService {
@@ -23,6 +24,13 @@ class ReceiverWebRTCService {
   bool _isRendererInitialized = false;
   bool _isProcessingOffer = false;
 
+  double? _senderTemperatureC;
+  String? _senderThermalStatus;
+  String? _senderDeviceName;
+  double? _receiverTemperatureC;
+  String? _receiverThermalStatus;
+  String? _receiverDeviceName;
+
   final StreamController<RTCPeerConnectionState> _connectionStateController =
       StreamController<RTCPeerConnectionState>.broadcast();
   final StreamController<bool> _streamingStatusController =
@@ -32,6 +40,7 @@ class ReceiverWebRTCService {
 
   Timer? _statsTimer;
   int _lastBytesReceived = 0;
+  int _lastFramesDecoded = 0;
   DateTime? _lastStatsTime;
 
   Stream<RTCPeerConnectionState> get connectionState =>
@@ -138,7 +147,10 @@ class ReceiverWebRTCService {
         if (loopbackUdpMatch != null) {
           final loopbackPort = int.tryParse(loopbackUdpMatch.group(1)!);
           if (loopbackPort != null) {
-            final relayPort = await _udpRelay.start(targetLoopbackPort: loopbackPort);
+            final relayPort = await _udpRelay.start(
+              targetLoopbackPort: loopbackPort,
+              remotePeerIp: _peerIp,
+            );
             candStr = candStr.replaceAll('127.0.0.1 $loopbackPort', '$myIp $relayPort');
           }
         }
@@ -180,7 +192,9 @@ class ReceiverWebRTCService {
     };
 
     _peerConnection!.onAddStream = (MediaStream stream) {
-      debugPrint('[ReceiverWebRTC] onAddStream event: ${stream.id}');
+      debugPrint(
+        '[ReceiverWebRTC] onAddStream event: tracks=${stream.getTracks().length}',
+      );
       renderer.srcObject = stream;
       _streamingStatusController.add(true);
     };
@@ -198,44 +212,49 @@ class ReceiverWebRTCService {
         case 'offer':
           if (message.sdp != null) {
             if (_isProcessingOffer) {
-              debugPrint(
-                '[ReceiverWebRTC] Ignoring duplicate concurrent SDP Offer.',
-              );
-              break;
+              debugPrint('[ReceiverWebRTC] Already processing an offer, ignoring duplicate.');
+              return;
             }
             _isProcessingOffer = true;
+
             try {
+              debugPrint('[ReceiverWebRTC] Processing incoming SDP Offer...');
               _peerIp = _extractPeerIp(message.sdp);
+              final detectedEngine =
+                  SdpCandidateSanitizer.detectCodecEngine(message.sdp);
               debugPrint(
-                '[ReceiverWebRTC] Handling incoming SDP Offer from peer IP: $_peerIp...',
+                '[ReceiverWebRTC] Detected sender CodecEngine: ${detectedEngine.label}',
               );
               await _setupPeerConnection();
 
-              final offerSdp = SdpCandidateSanitizer.sanitizeSdp(
+              final sanitizedOfferSdp = SdpCandidateSanitizer.sanitizeSdp(
                 message.sdp,
                 _peerIp,
+                codecEngine: detectedEngine,
               );
-              debugPrint('[ReceiverWebRTC] <<< INCOMING SDP OFFER:\n$offerSdp');
-
-              final description = RTCSessionDescription(offerSdp, 'offer');
+              debugPrint('[ReceiverWebRTC] <<< INCOMING SANITIZED OFFER:\n$sanitizedOfferSdp');
+              final description = RTCSessionDescription(
+                sanitizedOfferSdp,
+                'offer',
+              );
               await _peerConnection!.setRemoteDescription(description);
               _hasRemoteDescription = true;
 
-              // Drain queued ICE candidates received before the offer
+              // Drain queued ICE candidates
               final queued = List<RTCIceCandidate>.from(_iceCandidateQueue);
               _iceCandidateQueue.clear();
               for (final candidate in queued) {
                 debugPrint(
-                  '[ReceiverWebRTC] Adding queued ICE candidate: ${candidate.candidate}',
+                  '[ReceiverWebRTC] Adding queued candidate: ${candidate.candidate}',
                 );
                 try {
                   await _peerConnection!.addCandidate(candidate);
                 } catch (e) {
-                  debugPrint('[ReceiverWebRTC] Error adding candidate: $e');
+                  debugPrint('[ReceiverWebRTC] Error adding queued candidate: $e');
                 }
               }
 
-              // Register gathering listener before setting local description
+              // Register ICE Gathering Completer
               final gatheringCompleter = Completer<void>();
               _peerConnection!.onIceGatheringState = (state) {
                 debugPrint('[ReceiverWebRTC] ICE Gathering State: $state');
@@ -265,10 +284,10 @@ class ReceiverWebRTCService {
               var sdpStr = SdpCandidateSanitizer.sanitizeSdp(
                 fullAnswer?.sdp ?? answer.sdp,
                 myIp,
+                codecEngine: detectedEngine,
               );
 
               if (_udpRelay.publicPort != null) {
-                // Point media section to relay port
                 sdpStr = sdpStr.replaceAllMapped(
                   RegExp(r'm=video \d+ (UDP/TLS/RTP/SAVPF)'),
                   (m) => 'm=video ${_udpRelay.publicPort} ${m.group(1)}',
@@ -304,7 +323,9 @@ class ReceiverWebRTCService {
               );
 
               if (_hasRemoteDescription && _peerConnection != null) {
-                debugPrint('[ReceiverWebRTC] Adding direct ICE candidate: $fixedCandStr');
+                debugPrint(
+                  '[ReceiverWebRTC] Adding direct candidate: $fixedCandStr',
+                );
                 try {
                   await _peerConnection!.addCandidate(iceCandidate);
                 } catch (e) {
@@ -312,7 +333,7 @@ class ReceiverWebRTCService {
                 }
               } else {
                 debugPrint(
-                  '[ReceiverWebRTC] Queuing ICE candidate (waiting for remote SDP): $fixedCandStr',
+                  '[ReceiverWebRTC] Queuing candidate: $fixedCandStr',
                 );
                 _iceCandidateQueue.add(iceCandidate);
               }
@@ -326,6 +347,17 @@ class ReceiverWebRTCService {
 
         case 'pong':
           // Heartbeat ack
+          break;
+
+        case 'thermal_telemetry':
+          if (message.payload != null) {
+            _senderTemperatureC =
+                (message.payload!['temperatureC'] as num?)?.toDouble();
+            _senderThermalStatus =
+                message.payload!['thermalStatus'] as String? ?? 'NORMAL';
+            _senderDeviceName =
+                message.payload!['deviceName'] as String? ?? _senderDeviceName;
+          }
           break;
 
         case 'bye':
@@ -346,26 +378,40 @@ class ReceiverWebRTCService {
   void _startStatsPolling() {
     _stopStatsPolling();
     _lastBytesReceived = 0;
+    _lastFramesDecoded = 0;
     _lastStatsTime = DateTime.now();
 
     _statsTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
       if (_peerConnection == null) return;
       try {
         final reports = await _peerConnection!.getStats();
-        double currentFps = 30.0;
+        double currentFps = 0.0;
         int rtt = 6;
         double bitrateMbps = 0.0;
         int width = renderer.videoWidth > 0 ? renderer.videoWidth : 1280;
         int height = renderer.videoHeight > 0 ? renderer.videoHeight : 720;
+        final now = DateTime.now();
 
         for (final report in reports) {
           final values = report.values;
           if (report.type == 'inbound-rtp' && values['kind'] == 'video') {
-            if (values['framesPerSecond'] != null) {
+            final framesDecoded =
+                int.tryParse(values['framesDecoded']?.toString() ?? '') ?? 0;
+            if (_lastStatsTime != null && _lastFramesDecoded > 0) {
+              final durationSec =
+                  now.difference(_lastStatsTime!).inMilliseconds / 1000.0;
+              if (durationSec > 0.3 && framesDecoded >= _lastFramesDecoded) {
+                final calculatedFps =
+                    (framesDecoded - _lastFramesDecoded) / durationSec;
+                currentFps = calculatedFps.clamp(0.0, 60.0);
+              }
+            } else if (values['framesPerSecond'] != null) {
               currentFps =
-                  double.tryParse(values['framesPerSecond'].toString()) ??
-                      currentFps;
+                  (double.tryParse(values['framesPerSecond'].toString()) ?? 0.0)
+                      .clamp(0.0, 60.0);
             }
+            _lastFramesDecoded = framesDecoded;
+
             if (values['frameWidth'] != null) {
               width = int.tryParse(values['frameWidth'].toString()) ?? width;
             }
@@ -375,7 +421,6 @@ class ReceiverWebRTCService {
             if (values['bytesReceived'] != null) {
               final bytes =
                   int.tryParse(values['bytesReceived'].toString()) ?? 0;
-              final now = DateTime.now();
               if (_lastStatsTime != null &&
                   bytes > _lastBytesReceived &&
                   _lastBytesReceived > 0) {
@@ -387,7 +432,6 @@ class ReceiverWebRTCService {
                 }
               }
               _lastBytesReceived = bytes;
-              _lastStatsTime = now;
             }
           } else if (report.type == 'candidate-pair' &&
               values['currentRoundTripTime'] != null) {
@@ -397,16 +441,30 @@ class ReceiverWebRTCService {
             rtt = (rttSec * 1000).toInt();
           }
         }
+        _lastStatsTime = now;
+
+        // Query local device thermal state and device name
+        final localThermal =
+            await ForegroundServiceHelper.getDeviceThermalInfo();
+        _receiverTemperatureC = localThermal?.temperatureC;
+        _receiverThermalStatus = localThermal?.thermalStatus;
+        _receiverDeviceName = localThermal?.deviceName ?? _receiverDeviceName;
 
         _statsController.add(
           StreamPerformanceStats(
             fps: currentFps,
-            latencyMs: rtt > 0 ? rtt : 5,
+            latencyMs: rtt > 0 ? rtt : 6,
             bitrateMbps: bitrateMbps > 0
                 ? double.parse(bitrateMbps.toStringAsFixed(2))
                 : 3.5,
             width: width,
             height: height,
+            senderTemperatureC: _senderTemperatureC,
+            senderThermalStatus: _senderThermalStatus,
+            senderDeviceName: _senderDeviceName,
+            receiverTemperatureC: _receiverTemperatureC,
+            receiverThermalStatus: _receiverThermalStatus,
+            receiverDeviceName: _receiverDeviceName,
           ),
         );
       } catch (_) {}
@@ -420,30 +478,30 @@ class ReceiverWebRTCService {
 
   Future<void> _resetPeerConnection() async {
     _stopStatsPolling();
-    await _udpRelay.stop();
-    _isProcessingOffer = false;
-    _hasRemoteDescription = false;
-    _iceCandidateQueue.clear();
     _streamingStatusController.add(false);
+    await _udpRelay.stop();
 
-    if (_peerConnection != null) {
-      try {
+    try {
+      if (_peerConnection != null) {
         await _peerConnection!.close();
         await _peerConnection!.dispose();
-      } catch (e) {
-        debugPrint('[ReceiverWebRTC] Error closing peer connection: $e');
+        _peerConnection = null;
       }
-      _peerConnection = null;
+      renderer.srcObject = null;
+      _iceCandidateQueue.clear();
+      _hasRemoteDescription = false;
+      _lastBytesReceived = 0;
+      _lastFramesDecoded = 0;
+      _lastStatsTime = null;
+    } catch (e) {
+      debugPrint('[ReceiverWebRTC] Error during resetPeerConnection: $e');
     }
-    renderer.srcObject = null;
   }
 
   Future<void> dispose() async {
-    _stopStatsPolling();
-    await _udpRelay.stop();
+    await _resetPeerConnection();
     await _signalingSubscription?.cancel();
     await _clientStatusSubscription?.cancel();
-    await _resetPeerConnection();
     if (_isRendererInitialized) {
       await renderer.dispose();
       _isRendererInitialized = false;

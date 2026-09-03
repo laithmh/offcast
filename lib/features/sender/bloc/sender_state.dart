@@ -14,6 +14,7 @@ class SenderState extends Equatable {
   final bool isVerified;
   final String? clientIp;
   final StreamingQualityPreset preset;
+  final CodecEngine codecEngine;
   final String? errorMessage;
 
   const SenderState({
@@ -25,7 +26,8 @@ class SenderState extends Equatable {
     this.isScanning = false,
     this.isVerified = false,
     this.clientIp,
-    this.preset = StreamingQualityPreset.balanced720p30,
+    this.preset = StreamingQualityPreset.performance540p60,
+    this.codecEngine = CodecEngine.vp8,
     this.errorMessage,
   });
 
@@ -46,6 +48,7 @@ class SenderState extends Equatable {
     bool? isVerified,
     String? clientIp,
     StreamingQualityPreset? preset,
+    CodecEngine? codecEngine,
     String? errorMessage,
   }) {
     return SenderState(
@@ -58,6 +61,7 @@ class SenderState extends Equatable {
       isVerified: isVerified ?? this.isVerified,
       clientIp: clientIp ?? this.clientIp,
       preset: preset ?? this.preset,
+      codecEngine: codecEngine ?? this.codecEngine,
       errorMessage: errorMessage,
     );
   }
@@ -73,6 +77,7 @@ class SenderState extends Equatable {
     isVerified,
     clientIp,
     preset,
+    codecEngine,
     errorMessage,
   ];
 }

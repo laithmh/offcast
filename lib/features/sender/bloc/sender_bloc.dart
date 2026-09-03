@@ -27,6 +27,7 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     on<SenderScanStatusUpdated>(_onScanStatusUpdated);
     on<SenderClientIpDetected>(_onClientIpDetected);
     on<SenderQualityPresetChanged>(_onQualityPresetChanged);
+    on<SenderCodecEngineChanged>(_onCodecEngineChanged);
 
     _stateSubscription = webrtcService.stateStream.listen((connState) {
       add(SenderConnectionStateUpdated(connState));
@@ -170,6 +171,13 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     emit(state.copyWith(preset: event.preset));
   }
 
+  void _onCodecEngineChanged(
+    SenderCodecEngineChanged event,
+    Emitter<SenderState> emit,
+  ) {
+    emit(state.copyWith(codecEngine: event.codecEngine));
+  }
+
   Future<void> _onStartSharing(
     SenderStartSharingRequested event,
     Emitter<SenderState> emit,
@@ -179,6 +187,7 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
         targetHost: event.targetHost,
         targetPort: event.targetPort,
         preset: event.preset,
+        codecEngine: event.codecEngine,
         errorMessage: null,
       ),
     );
@@ -187,6 +196,7 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
       host: event.targetHost,
       port: event.targetPort,
       preset: event.preset,
+      codecEngine: event.codecEngine,
     );
   }
 

@@ -90,6 +90,7 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
         targetHost: _ipController.text.trim(),
         targetPort: int.tryParse(_portController.text.trim()) ?? 8080,
         preset: bloc.state.preset,
+        codecEngine: bloc.state.codecEngine,
       ),
     );
   }
@@ -167,7 +168,7 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
     );
   }
 
-  /// Live Broadcast Dashboard shown during active screen mirroring
+  /// Live Broadcast Dashboard shown during active streaming
   Widget _buildLiveBroadcastHud(SenderState state) {
     final webrtcService = context.read<SenderWebRTCService>();
 
@@ -193,7 +194,7 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
                   ),
                   const SizedBox(width: 8),
                   const Text(
-                    'LIVE STREAMING',
+                    'LIVE SCREEN CAST',
                     style: TextStyle(
                       color: AppTheme.success,
                       fontSize: 14,
@@ -306,7 +307,7 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
     );
   }
 
-  /// Configuration View shown before mirroring starts
+  /// Configuration View shown before streaming starts
   Widget _buildConfigurationView(SenderState state, bool isWide) {
     final hasWifi = state.clientIp != null;
 
@@ -321,8 +322,6 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
           _buildNoWifiBanner(),
           const SizedBox(height: 16),
         ],
-        _buildStatusCard(state),
-        const SizedBox(height: 18),
         _buildDiscoveryCard(state),
         const SizedBox(height: 18),
         _buildQualityPresetCard(state, isWide),
@@ -405,76 +404,6 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
             textColor: Colors.white,
             borderRadius: 12,
             child: const Text('Allow'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusCard(SenderState state) {
-    Color color = AppTheme.primary;
-    String title = 'Ready to Stream';
-    IconData icon = Icons.screen_share_rounded;
-
-    switch (state.status) {
-      case SenderConnectionState.capturingScreen:
-        color = AppTheme.accent;
-        title = 'Acquiring Display Media...';
-        icon = Icons.camera_alt_rounded;
-        break;
-      case SenderConnectionState.connectingSignaling:
-      case SenderConnectionState.connectedSignaling:
-      case SenderConnectionState.negotiatingWebRTC:
-        color = AppTheme.warning;
-        title = 'Connecting & Pairing...';
-        icon = Icons.sync_rounded;
-        break;
-      case SenderConnectionState.failed:
-        color = AppTheme.error;
-        title = 'Connection Failed';
-        icon = Icons.error_outline_rounded;
-        break;
-      default:
-        break;
-    }
-
-    return NeumorphicCard(
-      borderRadius: 20,
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Direct P2P LAN • Any device • Zero internet required',
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -643,6 +572,96 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
               );
             }).toList(),
           ),
+          const Divider(height: 28, color: AppTheme.surfaceElevated),
+          const Row(
+            children: [
+              Icon(
+                Icons.memory_rounded,
+                color: AppTheme.primary,
+                size: 16,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Video Codec Engine',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: CodecEngine.values.map((engine) {
+              final isSelected = state.codecEngine == engine;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => context
+                      .read<SenderBloc>()
+                      .add(SenderCodecEngineChanged(engine)),
+                  child: Container(
+                    margin: EdgeInsets.only(
+                      right: engine == CodecEngine.vp8 ? 6 : 0,
+                      left: engine == CodecEngine.h264 ? 6 : 0,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.primary.withValues(alpha: 0.08)
+                          : AppTheme.surfaceElevated,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.primary
+                            : Colors.transparent,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          engine == CodecEngine.vp8
+                              ? Icons.verified_user_rounded
+                              : Icons.bolt_rounded,
+                          color: isSelected
+                              ? AppTheme.primary
+                              : AppTheme.textMuted,
+                          size: 18,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          engine.label,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isSelected
+                                ? AppTheme.primary
+                                : AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          engine == CodecEngine.vp8
+                              ? 'Zero-Glitch Universal'
+                              : 'Snapdragon Silicon',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
         ],
       ),
     );
@@ -665,7 +684,9 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
       textColor: hasWifi ? Colors.white : AppTheme.textMuted,
       borderRadius: 18,
       icon: hasWifi ? Icons.play_arrow_rounded : Icons.wifi_off_rounded,
-      child: Text(hasWifi ? 'Start Screen Mirroring' : 'Connect to Hotspot to Stream'),
+      child: Text(
+        hasWifi ? 'Start Screen Mirroring' : 'Connect to Hotspot to Stream',
+      ),
     );
   }
 

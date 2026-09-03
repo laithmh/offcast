@@ -195,9 +195,10 @@ class NetworkHelper {
     return allIps.first;
   }
 
-  /// Returns all active private IPv4 addresses, prioritizing Wi-Fi/Hotspot over Cellular
+  /// Returns all active private IPv4 addresses, prioritizing Wi-Fi/Hotspot over USB and Cellular
   static Future<List<String>> getAllLocalIps() async {
     final wifiIps = <String>{};
+    final usbTetherIps = <String>{};
     final otherIps = <String>{};
 
     try {
@@ -215,9 +216,24 @@ class NetworkHelper {
             name.contains('radio') ||
             name.contains('dummy');
 
+        final isUsbTether = name.contains('rndis') ||
+            name.contains('ncm') ||
+            name.contains('usb');
+
+        final isWifiOrAp = name.contains('wlan') ||
+            name.contains('ap') ||
+            name.contains('softap') ||
+            name.contains('swlan') ||
+            name.contains('p2p') ||
+            name.contains('wl');
+
         for (final addr in iface.addresses) {
           if (SdpCandidateSanitizer.isPrivateIPv4(addr.address)) {
-            if (!isCellular) {
+            if (isWifiOrAp) {
+              wifiIps.add(addr.address);
+            } else if (isUsbTether) {
+              usbTetherIps.add(addr.address);
+            } else if (!isCellular) {
               wifiIps.add(addr.address);
             } else {
               otherIps.add(addr.address);
@@ -229,7 +245,9 @@ class NetworkHelper {
       debugPrint('[NetworkHelper] Error getting local IPs: $e');
     }
 
-    return wifiIps.isNotEmpty ? wifiIps.toList() : otherIps.toList();
+    if (wifiIps.isNotEmpty) return wifiIps.toList();
+    if (usbTetherIps.isNotEmpty) return usbTetherIps.toList();
+    return otherIps.toList();
   }
 
   /// Actively probes candidate IPs and local subnet for an active port 8080 receiver

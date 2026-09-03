@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -25,17 +24,11 @@ enum SenderConnectionState {
 }
 
 class SenderWebRTCService {
-  WebSocketChannel? _channel;
-  StreamSubscription? _channelSubscription;
-  StreamSubscription? _nativeStopSubscription;
-
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
+  WebSocketChannel? _channel;
+  StreamSubscription? _channelSubscription;
   final LocalUdpRelay _udpRelay = LocalUdpRelay();
-
-  final List<RTCIceCandidate> _iceCandidateQueue = [];
-  bool _hasRemoteDescription = false;
-  String? _currentTargetHost;
 
   final StreamController<SenderConnectionState> _stateController =
       StreamController<SenderConnectionState>.broadcast();
@@ -44,83 +37,55 @@ class SenderWebRTCService {
   final StreamController<StreamPerformanceStats> _statsController =
       StreamController<StreamPerformanceStats>.broadcast();
 
-  Timer? _statsTimer;
-  int _lastBytesSent = 0;
-  DateTime? _lastStatsTime;
-
   Stream<SenderConnectionState> get stateStream => _stateController.stream;
   Stream<String> get errorStream => _errorController.stream;
   Stream<StreamPerformanceStats> get statsStream => _statsController.stream;
 
-  SenderWebRTCService() {
-    // Listen for OS-level / notification stop events
-    _nativeStopSubscription = ForegroundServiceHelper.onStopEvent.listen((_) {
-      debugPrint('[SenderWebRTC] Received native OS stop signal. Stopping mirroring.');
-      stopMirroring();
-    });
-  }
+  final List<RTCIceCandidate> _iceCandidateQueue = [];
+  bool _hasRemoteDescription = false;
+  String? _currentTargetHost;
+  StreamingQualityPreset _currentPreset = StreamingQualityPreset.performance540p60;
+  CodecEngine _codecEngine = CodecEngine.vp8;
+  Timer? _statsTimer;
+  int _lastBytesSent = 0;
+  int _lastFramesEncoded = 0;
+  DateTime? _lastStatsTime;
 
+  /// Starts the ultra-low latency screen mirroring stream
   Future<void> startMirroring({
     required String host,
     int port = WebRTCConstants.signalingPort,
-    StreamingQualityPreset preset = StreamingQualityPreset.balanced720p30,
+    StreamingQualityPreset preset = StreamingQualityPreset.performance540p60,
+    CodecEngine codecEngine = CodecEngine.vp8,
   }) async {
+    _currentTargetHost = host;
+    _currentPreset = preset;
+    _codecEngine = codecEngine;
+    _iceCandidateQueue.clear();
+    _hasRemoteDescription = false;
+
     try {
-      _currentTargetHost = host;
-      _hasRemoteDescription = false;
-      _iceCandidateQueue.clear();
+      // 1. Start Native Android Foreground Service for persistent projection
+      _stateController.add(SenderConnectionState.capturingScreen);
+      await ForegroundServiceHelper.startService();
 
-      // 1. Bind Android process to Wi-Fi/Hotspot interface to prevent 4G Mobile Data routing
-      await ForegroundServiceHelper.bindToWifiNetwork();
-
-      // 2. Keep screen awake during mirroring
+      // 2. Keep screen on
       await ForegroundServiceHelper.setKeepScreenOn(true);
 
-      // 3. Ensure Notification permission is granted (Required on Android 13+ for Foreground Service)
-      if (Platform.isAndroid) {
-        final notifStatus = await Permission.notification.status;
-        if (!notifStatus.isGranted) {
-          debugPrint(
-            '[SenderWebRTC] Requesting POST_NOTIFICATIONS permission...',
-          );
-          await Permission.notification.request();
-        }
-      }
-
-      // 4. Start Android 14+ Foreground Service BEFORE acquiring MediaProjection
-      if (Platform.isAndroid) {
-        debugPrint(
-          '[SenderWebRTC] Starting Android Foreground Service for mediaProjection...',
-        );
-        final serviceStarted = await ForegroundServiceHelper.startService();
-        if (!serviceStarted) {
-          debugPrint(
-            '[SenderWebRTC] Warning: Foreground service returned false.',
-          );
-        }
-      }
-
-      // 5. Acquire Screen Capture Stream
-      _stateController.add(SenderConnectionState.capturingScreen);
-      debugPrint(
-        '[SenderWebRTC] Requesting getDisplayMedia for preset: ${preset.label}...',
-      );
-      final mediaConstraints = WebRTCConstants.getDisplayMediaConstraints(
-        preset: preset,
-      );
+      // 3. Acquire Display Media
       _localStream = await navigator.mediaDevices.getDisplayMedia(
-        mediaConstraints,
+        WebRTCConstants.getDisplayMediaConstraints(preset: preset),
       );
 
-      final videoTracks = _localStream!.getVideoTracks();
+      final videoTracks = _localStream?.getVideoTracks() ?? [];
       if (videoTracks.isEmpty) {
-        throw Exception('No video tracks available from screen capture.');
+        throw Exception('No display video track obtained.');
       }
-      debugPrint(
-        '[SenderWebRTC] Screen capture acquired. Tracks: ${videoTracks.length}',
-      );
 
-      // 6. Connect to Embedded Signaling WebSocket Server
+      // 4. Bind process to Wi-Fi network interface
+      await ForegroundServiceHelper.bindToWifiNetwork();
+
+      // 5. Connect to Receiver Embedded Signaling Server via WebSocket
       _stateController.add(SenderConnectionState.connectingSignaling);
       final wsUrl = Uri.parse('ws://$host:$port');
       debugPrint('[SenderWebRTC] Connecting to signaling server at $wsUrl');
@@ -130,13 +95,13 @@ class SenderWebRTCService {
       ).timeout(const Duration(seconds: 5));
       _channel = IOWebSocketChannel(ws);
       _stateController.add(SenderConnectionState.connectedSignaling);
-      debugPrint('[SenderWebRTC] Connected to signaling server.');
 
+      // 6. Listen for incoming signaling messages
       _channelSubscription = _channel!.stream.listen(
         _handleSignalingMessage,
-        onError: (err) {
-          debugPrint('[SenderWebRTC] WebSocket error: $err');
-          _errorController.add('Signaling connection error: $err');
+        onError: (error) {
+          debugPrint('[SenderWebRTC] Signaling channel error: $error');
+          _errorController.add('Signaling connection error: $error');
           _stateController.add(SenderConnectionState.failed);
         },
         onDone: () {
@@ -174,6 +139,8 @@ class SenderWebRTCService {
         }
       };
 
+      bool hasPhysicalCandidate = false;
+
       _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) async {
         if (candidate.candidate != null && candidate.candidate!.isNotEmpty) {
           debugPrint('[SenderWebRTC] Raw onIceCandidate generated: ${candidate.candidate}');
@@ -182,11 +149,27 @@ class SenderWebRTCService {
                   await NetworkHelper.getMyDeviceIp();
 
           var candStr = candidate.candidate!;
+          final isPhysical = !candStr.contains('127.0.0.1') &&
+              !candStr.contains('::1') &&
+              !candStr.contains('localhost');
+
+          if (isPhysical) {
+            hasPhysicalCandidate = true;
+            // Physical native candidate available: ensure relay is stopped
+            if (_udpRelay.publicPort != null) {
+              await _udpRelay.stop();
+            }
+          }
+
+          // Only use relay if no physical interface exists
           final loopbackUdpMatch = RegExp(r'candidate:\S+ \d+ udp \d+ 127\.0\.0\.1 (\d+)').firstMatch(candStr);
-          if (loopbackUdpMatch != null) {
+          if (loopbackUdpMatch != null && !hasPhysicalCandidate) {
             final loopbackPort = int.tryParse(loopbackUdpMatch.group(1)!);
             if (loopbackPort != null) {
-              final relayPort = await _udpRelay.start(targetLoopbackPort: loopbackPort);
+              final relayPort = await _udpRelay.start(
+                targetLoopbackPort: loopbackPort,
+                remotePeerIp: _currentTargetHost,
+              );
               candStr = candStr.replaceAll('127.0.0.1 $loopbackPort', '$myIp $relayPort');
             }
           }
@@ -234,13 +217,17 @@ class SenderWebRTCService {
           if (sender.track?.kind == 'video') {
             final parameters = sender.parameters;
             parameters.degradationPreference =
-                RTCDegradationPreference.MAINTAIN_FRAMERATE;
+                RTCDegradationPreference.BALANCED;
             if (parameters.encodings != null &&
                 parameters.encodings!.isNotEmpty) {
+              final scaleDown = preset == StreamingQualityPreset.performance540p60
+                  ? 2.0
+                  : (preset == StreamingQualityPreset.ultra1080p30 ? 1.0 : 1.5);
               for (final encoding in parameters.encodings!) {
                 encoding.minBitrate = (preset.bitrateKbps * 0.7).toInt() * 1000;
-                encoding.maxBitrate = (preset.bitrateKbps * 1.5).toInt() * 1000;
+                encoding.maxBitrate = preset.bitrateKbps * 1000;
                 encoding.maxFramerate = preset.targetFps;
+                encoding.scaleResolutionDownBy = scaleDown;
               }
             }
             await sender.setParameters(parameters);
@@ -262,9 +249,10 @@ class SenderWebRTCService {
         fullOffer?.sdp ?? offer.sdp,
         myIp,
         bitrateKbps: preset.bitrateKbps,
+        codecEngine: _codecEngine,
       );
 
-      if (_udpRelay.publicPort != null) {
+      if (!hasPhysicalCandidate && _udpRelay.publicPort != null) {
         sdpStr = sdpStr.replaceAllMapped(
           RegExp(r'm=video \d+ (UDP/TLS/RTP/SAVPF)'),
           (m) => 'm=video ${_udpRelay.publicPort} ${m.group(1)}',
@@ -321,11 +309,46 @@ class SenderWebRTCService {
             final answerSdp = SdpCandidateSanitizer.sanitizeSdp(
               message.sdp,
               _currentTargetHost,
+              codecEngine: _codecEngine,
             );
             debugPrint('[SenderWebRTC] <<< INCOMING SDP ANSWER:\n$answerSdp');
             final description = RTCSessionDescription(answerSdp, 'answer');
             await _peerConnection!.setRemoteDescription(description);
             _hasRemoteDescription = true;
+
+            // Apply active encoder bitrate and framerate parameters once negotiation finishes
+            try {
+              final senders = await _peerConnection!.getSenders();
+              for (final sender in senders) {
+                if (sender.track?.kind == 'video') {
+                  final parameters = sender.parameters;
+                  parameters.degradationPreference =
+                      RTCDegradationPreference.BALANCED;
+                  if (parameters.encodings != null &&
+                      parameters.encodings!.isNotEmpty) {
+                    final scaleDown = _currentPreset ==
+                            StreamingQualityPreset.performance540p60
+                        ? 2.0
+                        : (_currentPreset == StreamingQualityPreset.ultra1080p30
+                            ? 1.0
+                            : 1.5);
+                    for (final encoding in parameters.encodings!) {
+                      encoding.maxBitrate = _currentPreset.bitrateKbps * 1000;
+                      encoding.minBitrate =
+                          (_currentPreset.bitrateKbps * 0.70).toInt() * 1000;
+                      encoding.maxFramerate = _currentPreset.targetFps;
+                      encoding.scaleResolutionDownBy = scaleDown;
+                    }
+                  }
+                  await sender.setParameters(parameters);
+                  debugPrint(
+                    '[SenderWebRTC] Successfully configured active encoder: maxBitrate=${_currentPreset.bitrateKbps}kbps, minBitrate=${(_currentPreset.bitrateKbps * 0.70).toInt()}kbps, maxFps=${_currentPreset.targetFps}',
+                  );
+                }
+              }
+            } catch (e) {
+              debugPrint('[SenderWebRTC] Note: Could not set post-answer sender parameters: $e');
+            }
 
             // Drain queued ICE candidates
             final queued = List<RTCIceCandidate>.from(_iceCandidateQueue);
@@ -402,27 +425,38 @@ class SenderWebRTCService {
   void _startStatsPolling() {
     _stopStatsPolling();
     _lastBytesSent = 0;
+    _lastFramesEncoded = 0;
     _lastStatsTime = DateTime.now();
 
     _statsTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
       if (_peerConnection == null) return;
       try {
         final reports = await _peerConnection!.getStats();
-        double currentFps = 30.0;
+        double currentFps = 0.0;
         int rtt = 6;
         double bitrateMbps = 0.0;
+        final now = DateTime.now();
 
         for (final report in reports) {
           final values = report.values;
           if (report.type == 'outbound-rtp' && values['kind'] == 'video') {
-            if (values['framesPerSecond'] != null) {
+            final framesEncoded =
+                int.tryParse(values['framesEncoded']?.toString() ?? '') ?? 0;
+            if (_lastStatsTime != null && _lastFramesEncoded > 0) {
+              final durationSec =
+                  now.difference(_lastStatsTime!).inMilliseconds / 1000.0;
+              if (durationSec > 0 && framesEncoded >= _lastFramesEncoded) {
+                currentFps =
+                    (framesEncoded - _lastFramesEncoded) / durationSec;
+              }
+            } else if (values['framesPerSecond'] != null) {
               currentFps =
-                  double.tryParse(values['framesPerSecond'].toString()) ??
-                      currentFps;
+                  double.tryParse(values['framesPerSecond'].toString()) ?? 0.0;
             }
+            _lastFramesEncoded = framesEncoded;
+
             if (values['bytesSent'] != null) {
               final bytes = int.tryParse(values['bytesSent'].toString()) ?? 0;
-              final now = DateTime.now();
               if (_lastStatsTime != null &&
                   bytes > _lastBytesSent &&
                   _lastBytesSent > 0) {
@@ -434,7 +468,6 @@ class SenderWebRTCService {
                 }
               }
               _lastBytesSent = bytes;
-              _lastStatsTime = now;
             }
           } else if (report.type == 'candidate-pair' &&
               values['currentRoundTripTime'] != null) {
@@ -444,6 +477,20 @@ class SenderWebRTCService {
             rtt = (rttSec * 1000).toInt();
           }
         }
+        _lastStatsTime = now;
+
+        // Read device thermal state and transmit telemetry to receiver
+        final thermalInfo =
+            await ForegroundServiceHelper.getDeviceThermalInfo();
+        if (thermalInfo != null) {
+          _sendSignalingMessage(
+            SignalingMessage.thermalTelemetry(
+              temperatureC: thermalInfo.temperatureC,
+              thermalStatus: thermalInfo.thermalStatus,
+              deviceName: thermalInfo.deviceName,
+            ),
+          );
+        }
 
         _statsController.add(
           StreamPerformanceStats(
@@ -452,6 +499,9 @@ class SenderWebRTCService {
             bitrateMbps: bitrateMbps > 0
                 ? double.parse(bitrateMbps.toStringAsFixed(2))
                 : 3.5,
+            senderTemperatureC: thermalInfo?.temperatureC,
+            senderThermalStatus: thermalInfo?.thermalStatus,
+            senderDeviceName: thermalInfo?.deviceName,
           ),
         );
       } catch (_) {}
@@ -495,22 +545,28 @@ class SenderWebRTCService {
         }
         await _localStream!.dispose();
       } catch (e) {
-        debugPrint('[SenderWebRTC] Error disposing local media stream: $e');
+        debugPrint('[SenderWebRTC] Error stopping local stream: $e');
       }
       _localStream = null;
     }
 
+    _iceCandidateQueue.clear();
+    _hasRemoteDescription = false;
+    _lastBytesSent = 0;
+    _lastFramesEncoded = 0;
+    _lastStatsTime = null;
+
     if (Platform.isAndroid) {
-      await ForegroundServiceHelper.stopService();
       await ForegroundServiceHelper.setKeepScreenOn(false);
+      await ForegroundServiceHelper.stopService();
     }
 
     _stateController.add(SenderConnectionState.disconnected);
+    debugPrint('[SenderWebRTC] Mirroring session terminated cleanly.');
   }
 
   Future<void> dispose() async {
     await stopMirroring();
-    await _nativeStopSubscription?.cancel();
     await _stateController.close();
     await _errorController.close();
     await _statsController.close();

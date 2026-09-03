@@ -97,4 +97,80 @@ class ForegroundServiceHelper {
       return false;
     }
   }
+
+  /// Starts a high-priority native UDP socket relay with 2 MB buffer in Android OS space
+  static Future<int?> startNativeUdpRelay({
+    required int targetLoopbackPort,
+    String? remotePeerIp,
+  }) async {
+    if (!Platform.isAndroid) return null;
+
+    try {
+      final port = await _channel.invokeMethod<int>('startNativeUdpRelay', {
+        'targetLoopbackPort': targetLoopbackPort,
+        'remotePeerIp': remotePeerIp,
+      });
+      debugPrint('[ForegroundServiceHelper] startNativeUdpRelay returned: $port');
+      return port;
+    } catch (e) {
+      debugPrint('[ForegroundServiceHelper] Error starting native UDP relay: $e');
+      return null;
+    }
+  }
+
+  /// Stops the native UDP socket relay thread and closes socket
+  static Future<bool> stopNativeUdpRelay() async {
+    if (!Platform.isAndroid) return true;
+
+    try {
+      final result = await _channel.invokeMethod<bool>('stopNativeUdpRelay');
+      debugPrint('[ForegroundServiceHelper] stopNativeUdpRelay returned: $result');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('[ForegroundServiceHelper] Error stopping native UDP relay: $e');
+      return false;
+    }
+  }
+
+  /// Reads physical battery/chassis temperature and OS thermal throttling state
+  static Future<DeviceThermalInfo?> getDeviceThermalInfo() async {
+    if (!Platform.isAndroid) return null;
+
+    try {
+      final res = await _channel.invokeMapMethod<String, dynamic>('getDeviceThermalInfo');
+      if (res == null) return null;
+      final temp = (res['temperatureC'] as num?)?.toDouble();
+      final status = res['thermalStatus'] as String? ?? 'NORMAL';
+      final name = res['deviceName'] as String? ?? 'Device';
+      return DeviceThermalInfo(temperatureC: temp, thermalStatus: status, deviceName: name);
+    } catch (e) {
+      debugPrint('[ForegroundServiceHelper] Error getting device thermal info: $e');
+      return null;
+    }
+  }
+
+  /// Gets the real manufacturer and model of this device
+  static Future<String> getDeviceName() async {
+    if (!Platform.isAndroid) return 'Device';
+
+    try {
+      final name = await _channel.invokeMethod<String>('getDeviceName');
+      return name ?? 'Android Device';
+    } catch (_) {
+      return 'Android Device';
+    }
+  }
 }
+
+class DeviceThermalInfo {
+  final double? temperatureC;
+  final String thermalStatus;
+  final String deviceName;
+
+  const DeviceThermalInfo({
+    this.temperatureC,
+    this.thermalStatus = 'NORMAL',
+    this.deviceName = 'Device',
+  });
+}
+

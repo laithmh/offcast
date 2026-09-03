@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -75,7 +74,6 @@ class _ReceiverViewState extends State<_ReceiverView> {
   bool _showOverlay = true;
   bool _isMirrored = false;
   int _quarterTurns = 0;
-  Timer? _autoHideTimer;
   RTCVideoViewObjectFit _objectFit =
       RTCVideoViewObjectFit.RTCVideoViewObjectFitContain;
 
@@ -84,47 +82,30 @@ class _ReceiverViewState extends State<_ReceiverView> {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     ForegroundServiceHelper.setKeepScreenOn(true);
-    _resetAutoHideTimer();
   }
 
   @override
   void dispose() {
-    _autoHideTimer?.cancel();
     ForegroundServiceHelper.setKeepScreenOn(false);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
-  void _resetAutoHideTimer() {
-    _autoHideTimer?.cancel();
-    _autoHideTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted && _showOverlay) {
-        setState(() => _showOverlay = false);
-      }
-    });
-  }
-
   void _toggleOverlay() {
     setState(() {
       _showOverlay = !_showOverlay;
-      if (_showOverlay) {
-        _resetAutoHideTimer();
-      }
     });
   }
 
   void _cycleQuarterTurns() {
-    _resetAutoHideTimer();
     setState(() => _quarterTurns = (_quarterTurns + 1) % 4);
   }
 
   void _toggleMirror() {
-    _resetAutoHideTimer();
     setState(() => _isMirrored = !_isMirrored);
   }
 
   void _toggleFit() {
-    _resetAutoHideTimer();
     setState(() {
       _objectFit =
           _objectFit == RTCVideoViewObjectFit.RTCVideoViewObjectFitContain
@@ -156,42 +137,61 @@ class _ReceiverViewState extends State<_ReceiverView> {
             behavior: HitTestBehavior.opaque,
             onTap: _toggleOverlay,
             child: Stack(
+              fit: StackFit.expand,
               children: [
+                // Isolated Video Rendering Layer (RepaintBoundary eliminates CPU compositor repaints)
                 Positioned.fill(
-                  child: state.isStreaming
-                      ? Transform.scale(
-                          scaleX: _isMirrored ? -1.0 : 1.0,
-                          child: RotatedBox(
-                            quarterTurns: _quarterTurns,
-                            child: RTCVideoView(
-                              webrtcService.renderer,
-                              objectFit: _objectFit,
-                              filterQuality: FilterQuality.medium,
-                            ),
-                          ),
-                        )
-                      : _buildWaitingPlaceholder(state),
-                ),
-                if (_showOverlay) ...[
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: _buildTopBar(context, state),
+                  child: RepaintBoundary(
+                    child: state.isStreaming
+                        ? _buildVideoView(webrtcService)
+                        : _buildWaitingPlaceholder(state),
                   ),
-                  if (state.isStreaming)
-                    Positioned(
-                      right: 16,
-                      top: MediaQuery.of(context).padding.top + 70,
-                      child: _buildInStreamToolbar(),
+                ),
+                // Overlay Controls (Isolated with RepaintBoundary)
+                if (_showOverlay)
+                  Positioned.fill(
+                    child: RepaintBoundary(
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: _buildTopBar(context, state),
+                          ),
+                          if (state.isStreaming)
+                            Positioned(
+                              right: 16,
+                              top: MediaQuery.of(context).padding.top + 70,
+                              child: _buildInStreamToolbar(),
+                            ),
+                        ],
+                      ),
                     ),
-                ],
+                  ),
               ],
             ),
           );
         },
       ),
     );
+  }
+
+  Widget _buildVideoView(ReceiverWebRTCService webrtcService) {
+    final video = RTCVideoView(
+      webrtcService.renderer,
+      mirror: _isMirrored,
+      objectFit: _objectFit,
+      filterQuality: FilterQuality.low,
+    );
+
+    if (_quarterTurns != 0) {
+      return RotatedBox(
+        quarterTurns: _quarterTurns,
+        child: video,
+      );
+    }
+    return video;
   }
 
   Widget _buildInStreamToolbar() {
@@ -266,7 +266,7 @@ class _ReceiverViewState extends State<_ReceiverView> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Receiver Viewfinder',
+                  'Display Viewfinder',
                   style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w800,
@@ -275,20 +275,7 @@ class _ReceiverViewState extends State<_ReceiverView> {
                 ),
                 const SizedBox(height: 2),
                 if (state.isStreaming)
-                  StreamBuilder<StreamPerformanceStats>(
-                    stream: context.read<ReceiverWebRTCService>().statsStream,
-                    builder: (context, snapshot) {
-                      final stats = snapshot.data ?? const StreamPerformanceStats();
-                      return Text(
-                        '${stats.fps.toStringAsFixed(0)} FPS • ${stats.latencyMs}ms • ${stats.bitrateMbps} Mbps',
-                        style: const TextStyle(
-                          color: AppTheme.primary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      );
-                    },
-                  )
+                  const _ReceiverTelemetryDisplay()
                 else
                   Text(
                     state.localIp != null
@@ -339,15 +326,15 @@ class _ReceiverViewState extends State<_ReceiverView> {
                     borderRadius: 20,
                     color: AppTheme.warningLight,
                     padding: const EdgeInsets.all(20),
-                    child: Row(
+                    child: const Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.wifi_off_rounded,
                           color: AppTheme.warning,
                           size: 28,
                         ),
-                        const SizedBox(width: 14),
-                        const Expanded(
+                        SizedBox(width: 14),
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -419,7 +406,7 @@ class _ReceiverViewState extends State<_ReceiverView> {
                 Text(
                   !hasNetwork
                     ? 'Turn on Portable Hotspot in device settings. The screen will automatically start listening the moment it is turned on.'
-                    : 'Keep this screen open on your display device. On the casting device, tap Start Screen Mirroring.',
+                    : 'Keep this screen open on your display device. On the casting device, tap Start Stream.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
@@ -482,6 +469,127 @@ class _ReceiverViewState extends State<_ReceiverView> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ReceiverTelemetryDisplay extends StatelessWidget {
+  const _ReceiverTelemetryDisplay();
+
+  Color _getThermalColor(double? temp, String? status) {
+    if (status == 'CRITICAL' ||
+        status == 'EMERGENCY' ||
+        status == 'SHUTDOWN' ||
+        (temp != null && temp >= 45.0)) {
+      return AppTheme.error;
+    }
+    if (status == 'MODERATE' ||
+        status == 'SEVERE' ||
+        (temp != null && temp >= 40.0)) {
+      return AppTheme.warning;
+    }
+    return AppTheme.success;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final webrtcService = context.read<ReceiverWebRTCService>();
+
+    return StreamBuilder<StreamPerformanceStats>(
+      stream: webrtcService.statsStream,
+      builder: (context, snapshot) {
+        final stats = snapshot.data ?? const StreamPerformanceStats();
+        final phoneTemp = stats.senderTemperatureC;
+        final tabletTemp = stats.receiverTemperatureC;
+        final phoneColor =
+            _getThermalColor(phoneTemp, stats.senderThermalStatus);
+        final tabletColor =
+            _getThermalColor(tabletTemp, stats.receiverThermalStatus);
+
+        return Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            Text(
+              '${stats.fps > 0 ? '${stats.fps.toStringAsFixed(0)} FPS' : 'Still'} • ${stats.latencyMs}ms • ${stats.bitrateMbps} Mbps',
+              style: const TextStyle(
+                color: AppTheme.primary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (phoneTemp != null)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: phoneColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: phoneColor.withValues(alpha: 0.5),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      phoneTemp >= 42.0
+                          ? Icons.local_fire_department_rounded
+                          : Icons.thermostat_rounded,
+                      size: 11,
+                      color: phoneColor,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${stats.senderDeviceName ?? 'Sender'} ${phoneTemp.toStringAsFixed(1)}°C',
+                      style: TextStyle(
+                        color: phoneColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (tabletTemp != null)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: tabletColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: tabletColor.withValues(alpha: 0.5),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      tabletTemp >= 42.0
+                          ? Icons.local_fire_department_rounded
+                          : Icons.thermostat_rounded,
+                      size: 11,
+                      color: tabletColor,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${stats.receiverDeviceName ?? 'Receiver'} ${tabletTemp.toStringAsFixed(1)}°C',
+                      style: TextStyle(
+                        color: tabletColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

@@ -18,6 +18,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
   StreamSubscription<bool>? _clientStatusSub;
   StreamSubscription<bool>? _streamingStatusSub;
   Timer? _networkPollTimer;
+  String _deviceName = 'Android Display';
 
   ReceiverBloc({required this.signalingServer, required this.webrtcService})
       : super(const ReceiverState()) {
@@ -83,7 +84,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
         _discoveryBroadcaster.start(
           localIp: event.detectedIp!,
           signalingPort: state.port,
-          deviceName: 'Display Receiver',
+          deviceName: _deviceName,
         );
       }
     }
@@ -102,12 +103,14 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
       final allIps = await NetworkHelper.getAllLocalIps();
       final ip = allIps.isNotEmpty ? allIps.first : null;
 
+      _deviceName = await ForegroundServiceHelper.getDeviceName();
+
       if (ip != null) {
         // Start zero-touch UDP discovery beacon
         await _discoveryBroadcaster.start(
           localIp: ip,
           signalingPort: port,
-          deviceName: 'Display Receiver',
+          deviceName: _deviceName,
         );
       }
 
@@ -137,7 +140,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     _discoveryBroadcaster.start(
       localIp: event.selectedIp,
       signalingPort: state.port,
-      deviceName: 'Display Receiver',
+      deviceName: _deviceName,
     );
   }
 
@@ -174,6 +177,16 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
             ? ReceiverStatus.streaming
             : ReceiverStatus.clientConnected)
         : ReceiverStatus.listening;
+
+    if (event.isClientConnected) {
+      _discoveryBroadcaster.stop();
+    } else if (state.localIp != null && state.status == ReceiverStatus.listening) {
+      _discoveryBroadcaster.start(
+        localIp: state.localIp!,
+        signalingPort: state.port,
+        deviceName: _deviceName,
+      );
+    }
 
     emit(
       state.copyWith(

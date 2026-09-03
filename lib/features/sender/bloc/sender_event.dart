@@ -15,24 +15,17 @@ class SenderStartSharingRequested extends SenderEvent {
   final String targetHost;
   final int targetPort;
   final StreamingQualityPreset preset;
+  final CodecEngine codecEngine;
 
   const SenderStartSharingRequested({
     required this.targetHost,
     this.targetPort = 8080,
-    this.preset = StreamingQualityPreset.balanced720p30,
+    this.preset = StreamingQualityPreset.performance540p60,
+    this.codecEngine = CodecEngine.vp8,
   });
 
   @override
-  List<Object?> get props => [targetHost, targetPort, preset];
-}
-
-class SenderQualityPresetChanged extends SenderEvent {
-  final StreamingQualityPreset preset;
-
-  const SenderQualityPresetChanged(this.preset);
-
-  @override
-  List<Object?> get props => [preset];
+  List<Object?> get props => [targetHost, targetPort, preset, codecEngine];
 }
 
 class SenderStopSharingRequested extends SenderEvent {
@@ -101,4 +94,22 @@ class SenderClientIpDetected extends SenderEvent {
 
   @override
   List<Object?> get props => [clientIp];
+}
+
+class SenderQualityPresetChanged extends SenderEvent {
+  final StreamingQualityPreset preset;
+
+  const SenderQualityPresetChanged(this.preset);
+
+  @override
+  List<Object?> get props => [preset];
+}
+
+class SenderCodecEngineChanged extends SenderEvent {
+  final CodecEngine codecEngine;
+
+  const SenderCodecEngineChanged(this.codecEngine);
+
+  @override
+  List<Object?> get props => [codecEngine];
 }
