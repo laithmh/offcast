@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../../core/constants/webrtc_constants.dart';
+import '../../../core/models/prompter_model.dart';
 import '../../../core/models/signaling_message.dart';
 import '../../../core/network/discovery_beacon.dart';
 import '../../../core/network/local_udp_relay.dart';
@@ -37,6 +38,8 @@ class ReceiverWebRTCService {
       StreamController<bool>.broadcast();
   final StreamController<StreamPerformanceStats> _statsController =
       StreamController<StreamPerformanceStats>.broadcast();
+  final StreamController<PrompterConfig> _prompterStateController =
+      StreamController<PrompterConfig>.broadcast();
 
   Timer? _statsTimer;
   int _lastBytesReceived = 0;
@@ -47,6 +50,8 @@ class ReceiverWebRTCService {
       _connectionStateController.stream;
   Stream<bool> get isStreaming => _streamingStatusController.stream;
   Stream<StreamPerformanceStats> get statsStream => _statsController.stream;
+  Stream<PrompterConfig> get prompterStateStream =>
+      _prompterStateController.stream;
 
   ReceiverWebRTCService({required this.signalingServer});
 
@@ -360,6 +365,17 @@ class ReceiverWebRTCService {
           }
           break;
 
+        case 'prompter_state_sync':
+          if (message.payload != null) {
+            try {
+              final config = PrompterConfig.fromJson(message.payload!);
+              _prompterStateController.add(config);
+            } catch (e) {
+              debugPrint('[ReceiverWebRTC] Error parsing prompter state: $e');
+            }
+          }
+          break;
+
         case 'bye':
           debugPrint('[ReceiverWebRTC] Received Bye from sender.');
           await _resetPeerConnection();
@@ -498,6 +514,20 @@ class ReceiverWebRTCService {
     }
   }
 
+  /// Sends a remote director prompter command to the casting device
+  void sendPrompterCommand(String action, [Map<String, dynamic>? params]) {
+    signalingServer.sendMessage(
+      SignalingMessage.prompterCommand(action: action, params: params),
+    );
+  }
+
+  /// Sends a live script text update to the casting device
+  void sendPrompterScriptUpdate(String text, [String? title]) {
+    signalingServer.sendMessage(
+      SignalingMessage.prompterScriptUpdate(text: text, title: title),
+    );
+  }
+
   Future<void> dispose() async {
     await _resetPeerConnection();
     await _signalingSubscription?.cancel();
@@ -506,6 +536,7 @@ class ReceiverWebRTCService {
       await renderer.dispose();
       _isRendererInitialized = false;
     }
+    await _prompterStateController.close();
     await _connectionStateController.close();
     await _streamingStatusController.close();
     await _statsController.close();

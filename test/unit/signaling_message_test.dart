@@ -73,6 +73,38 @@ void main() {
       expect(decodedOrient?.payload?['width'], 1080);
       expect(decodedOrient?.payload?['height'], 2400);
       expect(decodedOrient?.payload?['rotation'], 90);
+
+      // Prompter command
+      final cmd = SignalingMessage.prompterCommand(
+        action: 'set_speed',
+        params: {'speedWpm': 180.0},
+      );
+      final decodedCmd = SignalingMessage.deserialize(cmd.serialize());
+      expect(decodedCmd?.type, 'prompter_command');
+      expect(decodedCmd?.payload?['action'], 'set_speed');
+      expect(decodedCmd?.payload?['speedWpm'], 180.0);
+
+      // Prompter script update
+      final scriptUpdate = SignalingMessage.prompterScriptUpdate(
+        text: 'Welcome back to our tech review channel!',
+        title: 'Tech Review Script',
+      );
+      final decodedScript = SignalingMessage.deserialize(scriptUpdate.serialize());
+      expect(decodedScript?.type, 'prompter_script_update');
+      expect(decodedScript?.payload?['text'], 'Welcome back to our tech review channel!');
+      expect(decodedScript?.payload?['title'], 'Tech Review Script');
+
+      // Prompter state sync
+      final stateSync = SignalingMessage.prompterStateSync({
+        'isPlaying': true,
+        'scrollSpeedWpm': 140.0,
+        'fontSize': 34.0,
+        'isVoiceActivated': true,
+      });
+      final decodedSync = SignalingMessage.deserialize(stateSync.serialize());
+      expect(decodedSync?.type, 'prompter_state_sync');
+      expect(decodedSync?.payload?['isPlaying'], isTrue);
+      expect(decodedSync?.payload?['scrollSpeedWpm'], 140.0);
     });
   });
 

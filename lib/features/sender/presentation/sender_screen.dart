@@ -10,6 +10,7 @@ import '../bloc/sender_bloc.dart';
 import '../bloc/sender_event.dart';
 import '../bloc/sender_state.dart';
 import '../data/sender_webrtc_service.dart';
+import 'widgets/talent_prompter_view.dart';
 
 class SenderScreen extends StatelessWidget {
   const SenderScreen({super.key});
@@ -77,20 +78,28 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
   Future<void> _startSharing() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final notifStatus = await Permission.notification.status;
-    if (!notifStatus.isGranted && mounted) {
-      final granted = await PermissionHelper.requestPermissions(context);
-      if (!granted) return;
+    final bloc = context.read<SenderBloc>();
+    if (bloc.state.streamSource == StreamSourceType.studioCamera) {
+      final camGranted =
+          await PermissionHelper.requestCameraAndMicPermissions(context);
+      if (!camGranted) return;
+    } else {
+      final notifStatus = await Permission.notification.status;
+      if (!notifStatus.isGranted && mounted) {
+        final granted = await PermissionHelper.requestPermissions(context);
+        if (!granted) return;
+      }
     }
 
     if (!mounted) return;
-    final bloc = context.read<SenderBloc>();
     bloc.add(
       SenderStartSharingRequested(
         targetHost: _ipController.text.trim(),
         targetPort: int.tryParse(_portController.text.trim()) ?? 8080,
         preset: bloc.state.preset,
         codecEngine: bloc.state.codecEngine,
+        streamSource: bloc.state.streamSource,
+        cameraFacing: bloc.state.cameraFacing,
       ),
     );
   }
@@ -101,45 +110,63 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: const Text('Sender Mode'),
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 12.0),
-          child: Center(
-            child: NeumorphicIconButton(
-              icon: Icons.arrow_back_ios_new_rounded,
-              size: 40,
-              onPressed: () => Navigator.of(context).pop(),
+    return BlocConsumer<SenderBloc, SenderState>(
+      listener: (context, state) {
+        if (state.isAutoDiscovered || state.discoveredDevice != null) {
+          _ipController.text = state.targetHost;
+          _portController.text = state.targetPort.toString();
+        }
+
+        if (state.status == SenderConnectionState.failed &&
+            state.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: AppTheme.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      },
+      builder: (context, state) {
+        // True Fullscreen OLED Prompter on Phone Display (if explicitly enabled)
+        if (state.isStreaming &&
+            state.streamSource == StreamSourceType.studioCamera &&
+            state.isPrompterOverlay) {
+          return TalentPrompterView(
+            config: state.prompterConfig,
+            onToggleHud: () => context
+                .read<SenderBloc>()
+                .add(const SenderPrompterOverlayToggled()),
+          );
+        }
+
+        // Lightweight, zero-interaction power-saving view during active streaming
+        if (state.isStreaming) {
+          return _buildConnectedSenderView(state);
+        }
+
+        // Configuration View before streaming
+        return Scaffold(
+          backgroundColor: AppTheme.background,
+          appBar: AppBar(
+            title: const Text('Sender Mode'),
+            leading: Padding(
+              padding: const EdgeInsets.only(left: 12.0),
+              child: Center(
+                child: NeumorphicIconButton(
+                  icon: Icons.arrow_back_ios_new_rounded,
+                  size: 40,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
-      body: BlocConsumer<SenderBloc, SenderState>(
-        listener: (context, state) {
-          if (state.isAutoDiscovered || state.discoveredDevice != null) {
-            _ipController.text = state.targetHost;
-            _portController.text = state.targetPort.toString();
-          }
-
-          if (state.status == SenderConnectionState.failed &&
-              state.errorMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.errorMessage!),
-                backgroundColor: AppTheme.error,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                duration: const Duration(seconds: 5),
-              ),
-            );
-          }
-        },
-        builder: (context, state) {
-          return LayoutBuilder(
+          body: LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 600;
               final horizontalPadding = constraints.maxWidth < 380 ? 14.0 : 20.0;
@@ -154,156 +181,260 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
                     constraints: const BoxConstraints(maxWidth: 720),
                     child: Form(
                       key: _formKey,
-                      child: state.isStreaming
-                          ? _buildLiveBroadcastHud(state)
-                          : _buildConfigurationView(state, isWide),
+                      child: _buildConfigurationView(state, isWide),
                     ),
                   ),
                 ),
               );
             },
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
-  /// Live Broadcast Dashboard shown during active streaming
-  Widget _buildLiveBroadcastHud(SenderState state) {
+  /// Minimal, power-saving connected screen during active broadcast
+  Widget _buildConnectedSenderView(SenderState state) {
     final webrtcService = context.read<SenderWebRTCService>();
+    final isCamera = state.streamSource == StreamSourceType.studioCamera;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 10),
-        NeumorphicCard(
-          borderRadius: 24,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Row(
+    return Scaffold(
+      backgroundColor: const Color(0xFF07090E), // Deep OLED black
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Studio Status Pill
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.success.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: AppTheme.success.withValues(alpha: 0.4),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppTheme.success,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            isCamera
+                                ? 'CAMERA TRANSMITTER ACTIVE'
+                                : 'SCREEN MIRRORING ACTIVE',
+                            style: const TextStyle(
+                              color: AppTheme.success,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+
+                  // Main Status Card
                   Container(
-                    width: 12,
-                    height: 12,
-                    decoration: const BoxDecoration(
-                      color: AppTheme.success,
-                      shape: BoxShape.circle,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF111827),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 20,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'LIVE SCREEN CAST',
-                    style: TextStyle(
-                      color: AppTheme.success,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Streaming to ${state.targetHost}:${state.targetPort}',
-                style: const TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 24),
-              StreamBuilder<StreamPerformanceStats>(
-                stream: webrtcService.statsStream,
-                builder: (context, snapshot) {
-                  final stats = snapshot.data ?? const StreamPerformanceStats();
-                  return Row(
-                    children: [
-                      Expanded(
-                        child: _buildTelemetryTile(
-                          icon: Icons.speed_rounded,
-                          title: 'Framerate',
-                          value: '${stats.fps.toStringAsFixed(0)} FPS',
+                    child: Column(
+                      children: [
+                        Icon(
+                          isCamera
+                              ? Icons.videocam_rounded
+                              : Icons.screen_share_rounded,
                           color: AppTheme.primary,
+                          size: 52,
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildTelemetryTile(
-                          icon: Icons.timer_outlined,
-                          title: 'Latency',
-                          value: '${stats.latencyMs} ms',
-                          color: stats.latencyMs < 30 ? AppTheme.success : AppTheme.warning,
+                        const SizedBox(height: 14),
+                        const Text(
+                          'Connected to Viewer Monitor',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Target: ${state.targetHost}:${state.targetPort}',
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const Divider(color: Colors.white10),
+                        const SizedBox(height: 12),
+                        // Glanceable telemetry row
+                        StreamBuilder<StreamPerformanceStats>(
+                          stream: webrtcService.statsStream,
+                          builder: (context, snapshot) {
+                            final stats = snapshot.data ?? const StreamPerformanceStats();
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _buildGlanceablePill(
+                                  label: 'FPS',
+                                  value: stats.fps > 0 ? stats.fps.toStringAsFixed(0) : '60',
+                                  color: AppTheme.primary,
+                                ),
+                                _buildGlanceablePill(
+                                  label: 'Latency',
+                                  value: '${stats.latencyMs} ms',
+                                  color: stats.latencyMs < 35
+                                      ? AppTheme.success
+                                      : AppTheme.warning,
+                                ),
+                                if (isCamera)
+                                  _buildGlanceablePill(
+                                    label: 'Camera',
+                                    value: state.cameraFacing == CameraFacingMode.environment
+                                        ? 'Rear'
+                                        : 'Front',
+                                    color: AppTheme.accent,
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Actions: Flip Camera & Stop
+                  Row(
+                    children: [
+                      if (isCamera)
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1E293B),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: const BorderSide(color: Colors.white12),
+                              ),
+                            ),
+                            icon: const Icon(Icons.cameraswitch_rounded, size: 20),
+                            label: const Text(
+                              'Flip Camera',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            onPressed: () => webrtcService.switchCamera(),
+                          ),
+                        ),
+                      if (isCamera) const SizedBox(width: 12),
                       Expanded(
-                        child: _buildTelemetryTile(
-                          icon: Icons.data_usage_rounded,
-                          title: 'Bitrate',
-                          value: '${stats.bitrateMbps.toStringAsFixed(1)} Mbps',
-                          color: AppTheme.accent,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.error.withValues(alpha: 0.9),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          icon: const Icon(Icons.stop_rounded, size: 20),
+                          label: const Text(
+                            'Disconnect',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          onPressed: _stopSharing,
                         ),
                       ),
                     ],
-                  );
-                },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Optional Talent Prompter Glass toggle
+                  if (isCamera)
+                    Center(
+                      child: TextButton.icon(
+                        icon: const Icon(
+                          Icons.subtitles_rounded,
+                          size: 16,
+                          color: Colors.white54,
+                        ),
+                        label: const Text(
+                          'Show Teleprompter on this display',
+                          style: TextStyle(color: Colors.white54, fontSize: 13),
+                        ),
+                        onPressed: () => context
+                            .read<SenderBloc>()
+                            .add(const SenderPrompterOverlayToggled()),
+                      ),
+                    ),
+                ],
               ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                child: NeumorphicButton(
-                  onPressed: _stopSharing,
-                  backgroundColor: AppTheme.error,
-                  textColor: Colors.white,
-                  borderRadius: 18,
-                  icon: Icons.stop_rounded,
-                  child: const Text('Stop Screen Sharing'),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildTelemetryTile({
-    required IconData icon,
-    required String title,
+  Widget _buildGlanceablePill({
+    required String label,
     required String value,
     required Color color,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceElevated,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-            ),
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
           ),
-          const SizedBox(height: 2),
-          Text(
-            title,
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -324,12 +455,120 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
         ],
         _buildDiscoveryCard(state),
         const SizedBox(height: 18),
-        _buildQualityPresetCard(state, isWide),
+        if (isWide)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildStreamSourceCard(state, isWide)),
+              const SizedBox(width: 16),
+              Expanded(child: _buildQualityPresetCard(state, isWide)),
+            ],
+          )
+        else ...[
+          _buildStreamSourceCard(state, isWide),
+          const SizedBox(height: 18),
+          _buildQualityPresetCard(state, isWide),
+        ],
         const SizedBox(height: 24),
         _buildActionButtons(state),
         const SizedBox(height: 16),
         _buildManualOverrideSection(state),
       ],
+    );
+  }
+
+  Widget _buildStreamSourceCard(SenderState state, bool isWide) {
+    return NeumorphicCard(
+      borderRadius: 20,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.video_settings_rounded, color: AppTheme.primary, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Broadcast Stream Source',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: StreamSourceType.values.map((source) {
+              final isSelected = state.streamSource == source;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => context
+                      .read<SenderBloc>()
+                      .add(SenderStreamSourceChanged(source)),
+                  child: Container(
+                    margin: EdgeInsets.only(
+                      right: source == StreamSourceType.screen ? 6 : 0,
+                      left: source == StreamSourceType.studioCamera ? 6 : 0,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.primary.withValues(alpha: 0.08)
+                          : AppTheme.surfaceElevated,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected ? AppTheme.primary : Colors.transparent,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          source == StreamSourceType.studioCamera
+                              ? Icons.videocam_rounded
+                              : Icons.screen_share_rounded,
+                          color: isSelected
+                              ? AppTheme.primary
+                              : AppTheme.textMuted,
+                          size: 24,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          source.label,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: isSelected
+                                ? AppTheme.primary
+                                : AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          source == StreamSourceType.studioCamera
+                              ? '1080p 60 FPS + Prompter'
+                              : 'Mirror Phone Screen',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -669,6 +908,7 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
 
   Widget _buildActionButtons(SenderState state) {
     final hasWifi = state.clientIp != null;
+    final isCamera = state.streamSource == StreamSourceType.studioCamera;
 
     return NeumorphicButton(
       onPressed: hasWifi ? _startSharing : () {
@@ -683,9 +923,15 @@ class _SenderViewState extends State<_SenderView> with WidgetsBindingObserver {
       backgroundColor: hasWifi ? AppTheme.primary : AppTheme.surfaceElevated,
       textColor: hasWifi ? Colors.white : AppTheme.textMuted,
       borderRadius: 18,
-      icon: hasWifi ? Icons.play_arrow_rounded : Icons.wifi_off_rounded,
+      icon: !hasWifi
+          ? Icons.wifi_off_rounded
+          : (isCamera ? Icons.videocam_rounded : Icons.play_arrow_rounded),
       child: Text(
-        hasWifi ? 'Start Screen Mirroring' : 'Connect to Hotspot to Stream',
+        !hasWifi
+            ? 'Connect to Hotspot to Stream'
+            : (isCamera
+                ? 'Start Studio Camera & Prompter'
+                : 'Start Screen Mirroring'),
       ),
     );
   }

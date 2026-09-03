@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import '../../../core/constants/webrtc_constants.dart';
+import '../../../core/models/prompter_model.dart';
 import '../../../core/network/discovery_beacon.dart';
 import '../data/sender_webrtc_service.dart';
 
@@ -15,6 +16,10 @@ class SenderState extends Equatable {
   final String? clientIp;
   final StreamingQualityPreset preset;
   final CodecEngine codecEngine;
+  final StreamSourceType streamSource;
+  final CameraFacingMode cameraFacing;
+  final PrompterConfig prompterConfig;
+  final bool isPrompterOverlay;
   final String? errorMessage;
 
   const SenderState({
@@ -28,6 +33,10 @@ class SenderState extends Equatable {
     this.clientIp,
     this.preset = StreamingQualityPreset.performance540p60,
     this.codecEngine = CodecEngine.vp8,
+    this.streamSource = StreamSourceType.studioCamera,
+    this.cameraFacing = CameraFacingMode.environment,
+    this.prompterConfig = const PrompterConfig(),
+    this.isPrompterOverlay = false,
     this.errorMessage,
   });
 
@@ -49,6 +58,10 @@ class SenderState extends Equatable {
     String? clientIp,
     StreamingQualityPreset? preset,
     CodecEngine? codecEngine,
+    StreamSourceType? streamSource,
+    CameraFacingMode? cameraFacing,
+    PrompterConfig? prompterConfig,
+    bool? isPrompterOverlay,
     String? errorMessage,
   }) {
     return SenderState(
@@ -62,22 +75,30 @@ class SenderState extends Equatable {
       clientIp: clientIp ?? this.clientIp,
       preset: preset ?? this.preset,
       codecEngine: codecEngine ?? this.codecEngine,
+      streamSource: streamSource ?? this.streamSource,
+      cameraFacing: cameraFacing ?? this.cameraFacing,
+      prompterConfig: prompterConfig ?? this.prompterConfig,
+      isPrompterOverlay: isPrompterOverlay ?? this.isPrompterOverlay,
       errorMessage: errorMessage,
     );
   }
 
   @override
   List<Object?> get props => [
-    status,
-    targetHost,
-    targetPort,
-    discoveredDevice,
-    isAutoDiscovered,
-    isScanning,
-    isVerified,
-    clientIp,
-    preset,
-    codecEngine,
-    errorMessage,
-  ];
+        status,
+        targetHost,
+        targetPort,
+        discoveredDevice,
+        isAutoDiscovered,
+        isScanning,
+        isVerified,
+        clientIp,
+        preset,
+        codecEngine,
+        streamSource,
+        cameraFacing,
+        prompterConfig,
+        isPrompterOverlay,
+        errorMessage,
+      ];
 }

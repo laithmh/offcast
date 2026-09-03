@@ -12,6 +12,9 @@ import '../bloc/receiver_event.dart';
 import '../bloc/receiver_state.dart';
 import '../data/embedded_signaling_server.dart';
 import '../data/receiver_webrtc_service.dart';
+import 'widgets/director_prompter_overlay.dart';
+import 'widgets/director_prompter_sheet.dart';
+import 'widgets/social_framing_overlay.dart';
 
 class ReceiverScreen extends StatefulWidget {
   const ReceiverScreen({super.key});
@@ -76,6 +79,41 @@ class _ReceiverViewState extends State<_ReceiverView> {
   int _quarterTurns = 0;
   RTCVideoViewObjectFit _objectFit =
       RTCVideoViewObjectFit.RTCVideoViewObjectFitContain;
+  Offset? _prompterOffset;
+
+  void _onPrompterPanUpdate(
+    DragUpdateDetails details,
+    Size screenSize,
+    EdgeInsets safeArea,
+  ) {
+    setState(() {
+      final isTablet = screenSize.width >= 640;
+      final overlayWidth =
+          (isTablet ? 700.0 : screenSize.width - 24.0).clamp(280.0, screenSize.width);
+      final overlayHeight = isTablet ? 230.0 : 190.0;
+
+      final defaultX = (screenSize.width - overlayWidth) / 2.0;
+      final defaultY =
+          screenSize.height - overlayHeight - (_showOverlay ? 90.0 : 36.0);
+
+      final current = _prompterOffset ?? Offset(defaultX, defaultY);
+      final newX = (current.dx + details.delta.dx).clamp(
+        4.0,
+        (screenSize.width - overlayWidth - 4.0).clamp(4.0, screenSize.width),
+      );
+      final newY = (current.dy + details.delta.dy).clamp(
+        safeArea.top + 8.0,
+        (screenSize.height - overlayHeight - 8.0)
+            .clamp(safeArea.top + 8.0, screenSize.height),
+      );
+
+      _prompterOffset = Offset(newX, newY);
+    });
+  }
+
+  void _resetPrompterPosition() {
+    setState(() => _prompterOffset = null);
+  }
 
   @override
   void initState() {
@@ -147,6 +185,61 @@ class _ReceiverViewState extends State<_ReceiverView> {
                         : _buildWaitingPlaceholder(state),
                   ),
                 ),
+                // Framing Guides Layer
+                if (state.isStreaming &&
+                    state.framingMode != SocialFramingMode.none)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: SocialFramingOverlay(mode: state.framingMode),
+                    ),
+                  ),
+
+                // Live Director Prompter Monitor Layer (Freely Draggable Anywhere)
+                if (state.isStreaming && state.isPrompterOverlayVisible) ...[
+                  Builder(
+                    builder: (context) {
+                      final screenSize = MediaQuery.of(context).size;
+                      final safeArea = MediaQuery.of(context).padding;
+                      final isTablet = screenSize.width >= 640;
+                      final overlayWidth = (isTablet ? 700.0 : screenSize.width - 24.0)
+                          .clamp(280.0, screenSize.width);
+                      final overlayHeight = isTablet ? 230.0 : 190.0;
+
+                      final defaultX = (screenSize.width - overlayWidth) / 2.0;
+                      final defaultY = screenSize.height -
+                          overlayHeight -
+                          (_showOverlay ? 90.0 : 36.0);
+
+                      final leftPos = (_prompterOffset?.dx ?? defaultX).clamp(
+                        4.0,
+                        (screenSize.width - overlayWidth - 4.0)
+                            .clamp(4.0, screenSize.width),
+                      );
+                      final topPos = (_prompterOffset?.dy ?? defaultY).clamp(
+                        safeArea.top + 8.0,
+                        (screenSize.height - overlayHeight - 8.0)
+                            .clamp(safeArea.top + 8.0, screenSize.height),
+                      );
+
+                      return Positioned(
+                        left: leftPos,
+                        top: topPos,
+                        width: overlayWidth,
+                        child: DirectorPrompterOverlay(
+                          config: state.prompterConfig,
+                          onPanUpdate: (details) => _onPrompterPanUpdate(
+                            details,
+                            screenSize,
+                            safeArea,
+                          ),
+                          onResetPosition: _resetPrompterPosition,
+                          isCustomPositioned: _prompterOffset != null,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+
                 // Overlay Controls (Isolated with RepaintBoundary)
                 if (_showOverlay)
                   Positioned.fill(
@@ -163,7 +256,7 @@ class _ReceiverViewState extends State<_ReceiverView> {
                             Positioned(
                               right: 16,
                               top: MediaQuery.of(context).padding.top + 70,
-                              child: _buildInStreamToolbar(),
+                              child: _buildInStreamToolbar(state),
                             ),
                         ],
                       ),
@@ -194,46 +287,112 @@ class _ReceiverViewState extends State<_ReceiverView> {
     return video;
   }
 
-  Widget _buildInStreamToolbar() {
+  Widget _buildInStreamToolbar(ReceiverState state) {
     final isCover =
         _objectFit == RTCVideoViewObjectFit.RTCVideoViewObjectFitCover;
 
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height - 140,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       decoration: BoxDecoration(
         color: AppTheme.surface.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(18),
         boxShadow: AppTheme.neumorphicShadowElevated,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          NeumorphicIconButton(
-            size: 40,
-            tooltip: 'Rotate (${_quarterTurns * 90}°)',
-            icon: Icons.rotate_90_degrees_cw_rounded,
-            iconColor: AppTheme.primary,
-            onPressed: _cycleQuarterTurns,
-          ),
-          const SizedBox(height: 8),
-          NeumorphicIconButton(
-            size: 40,
-            tooltip: _isMirrored ? 'Disable Mirror' : 'Mirror Feed (Selfie)',
-            icon: Icons.flip_rounded,
-            iconColor: _isMirrored ? AppTheme.accent : AppTheme.textPrimary,
-            onPressed: _toggleMirror,
-          ),
-          const SizedBox(height: 8),
-          NeumorphicIconButton(
-            size: 40,
-            tooltip: isCover ? 'Fit View' : 'Fill View',
-            icon: isCover
-                ? Icons.fullscreen_exit_rounded
-                : Icons.fullscreen_rounded,
-            iconColor: AppTheme.textPrimary,
-            onPressed: _toggleFit,
-          ),
-        ],
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            NeumorphicIconButton(
+              size: 40,
+              tooltip: 'Rotate (${_quarterTurns * 90}°)',
+              icon: Icons.rotate_90_degrees_cw_rounded,
+              iconColor: AppTheme.primary,
+              onPressed: _cycleQuarterTurns,
+            ),
+            const SizedBox(height: 8),
+            NeumorphicIconButton(
+              size: 40,
+              tooltip: _isMirrored ? 'Disable Mirror' : 'Mirror Feed (Selfie)',
+              icon: Icons.flip_rounded,
+              iconColor: _isMirrored ? AppTheme.accent : AppTheme.textPrimary,
+              onPressed: _toggleMirror,
+            ),
+            const SizedBox(height: 8),
+            NeumorphicIconButton(
+              size: 40,
+              tooltip: isCover ? 'Fit View' : 'Fill View',
+              icon: isCover
+                  ? Icons.fullscreen_exit_rounded
+                  : Icons.fullscreen_rounded,
+              iconColor: AppTheme.textPrimary,
+              onPressed: _toggleFit,
+            ),
+            const SizedBox(height: 8),
+            NeumorphicIconButton(
+              size: 40,
+              tooltip: 'Framing Guide (${state.framingMode.label})',
+              icon: state.framingMode != SocialFramingMode.none
+                  ? Icons.crop_rounded
+                  : Icons.crop_free_rounded,
+              iconColor: state.framingMode != SocialFramingMode.none
+                  ? AppTheme.accent
+                  : AppTheme.textPrimary,
+              onPressed: () => context
+                  .read<ReceiverBloc>()
+                  .add(const ReceiverFramingModeCycled()),
+            ),
+            const SizedBox(height: 8),
+            NeumorphicIconButton(
+              size: 40,
+              tooltip: 'Remote Flip Camera',
+              icon: Icons.cameraswitch_rounded,
+              iconColor: AppTheme.accent,
+              onPressed: () => context
+                  .read<ReceiverBloc>()
+                  .add(const ReceiverPrompterCommandDispatched('switch_camera')),
+            ),
+            const SizedBox(height: 8),
+            NeumorphicIconButton(
+              size: 40,
+              tooltip: state.isPrompterOverlayVisible
+                  ? 'Hide Prompter Monitor'
+                  : 'Show Prompter Monitor',
+              icon: state.isPrompterOverlayVisible
+                  ? Icons.subtitles_rounded
+                  : Icons.subtitles_off_rounded,
+              iconColor: state.isPrompterOverlayVisible
+                  ? AppTheme.accent
+                  : AppTheme.textPrimary,
+              onPressed: () => context
+                  .read<ReceiverBloc>()
+                  .add(const ReceiverPrompterOverlayToggled()),
+            ),
+            const SizedBox(height: 8),
+            NeumorphicIconButton(
+              size: 40,
+              tooltip: 'Director Script Remote',
+              icon: Icons.edit_note_rounded,
+              iconColor: AppTheme.primary,
+              onPressed: () => _openDirectorPrompterSheet(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openDirectorPrompterSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => BlocProvider.value(
+        value: context.read<ReceiverBloc>(),
+        child: const DirectorPrompterSheet(),
       ),
     );
   }

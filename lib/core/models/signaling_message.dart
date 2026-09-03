@@ -79,6 +79,39 @@ class SignalingMessage {
     );
   }
 
+  factory SignalingMessage.prompterCommand({
+    required String action,
+    Map<String, dynamic>? params,
+  }) {
+    return SignalingMessage(
+      type: 'prompter_command',
+      payload: {
+        'action': action,
+        ...?params,
+      },
+    );
+  }
+
+  factory SignalingMessage.prompterScriptUpdate({
+    required String text,
+    String? title,
+  }) {
+    return SignalingMessage(
+      type: 'prompter_script_update',
+      payload: {
+        'text': text,
+        'title': ?title,
+      },
+    );
+  }
+
+  factory SignalingMessage.prompterStateSync(Map<String, dynamic> state) {
+    return SignalingMessage(
+      type: 'prompter_state_sync',
+      payload: state,
+    );
+  }
+
   factory SignalingMessage.fromJson(Map<String, dynamic> json) {
     return SignalingMessage(
       type: json['type'] as String? ?? 'unknown',

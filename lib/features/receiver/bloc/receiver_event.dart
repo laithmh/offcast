@@ -1,5 +1,8 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../core/models/prompter_model.dart';
+import 'receiver_state.dart';
+
 abstract class ReceiverEvent extends Equatable {
   const ReceiverEvent();
 
@@ -58,4 +61,62 @@ class ReceiverNetworkPolled extends ReceiverEvent {
 
   @override
   List<Object?> get props => [detectedIp, availableIps];
+}
+
+class ReceiverFramingModeCycled extends ReceiverEvent {
+  const ReceiverFramingModeCycled();
+}
+
+class ReceiverFramingModeSelected extends ReceiverEvent {
+  final SocialFramingMode mode;
+
+  const ReceiverFramingModeSelected(this.mode);
+
+  @override
+  List<Object?> get props => [mode];
+}
+
+class ReceiverDirectorPrompterToggled extends ReceiverEvent {
+  const ReceiverDirectorPrompterToggled();
+}
+
+class ReceiverPrompterStateSynced extends ReceiverEvent {
+  final PrompterConfig config;
+
+  const ReceiverPrompterStateSynced(this.config);
+
+  @override
+  List<Object?> get props => [config];
+}
+
+class ReceiverPrompterCommandDispatched extends ReceiverEvent {
+  final String action;
+  final Map<String, dynamic>? params;
+
+  const ReceiverPrompterCommandDispatched(this.action, [this.params]);
+
+  @override
+  List<Object?> get props => [action, params];
+}
+
+class ReceiverPrompterScriptDispatched extends ReceiverEvent {
+  final String scriptText;
+
+  const ReceiverPrompterScriptDispatched(this.scriptText);
+
+  @override
+  List<Object?> get props => [scriptText];
+}
+
+class ReceiverPrompterOverlayToggled extends ReceiverEvent {
+  const ReceiverPrompterOverlayToggled();
+}
+
+class ReceiverPrompterProgressUpdated extends ReceiverEvent {
+  final double progress;
+
+  const ReceiverPrompterProgressUpdated(this.progress);
+
+  @override
+  List<Object?> get props => [progress];
 }

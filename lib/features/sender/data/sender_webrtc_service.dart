@@ -36,31 +36,44 @@ class SenderWebRTCService {
       StreamController<String>.broadcast();
   final StreamController<StreamPerformanceStats> _statsController =
       StreamController<StreamPerformanceStats>.broadcast();
+  final StreamController<SignalingMessage> _prompterMessageController =
+      StreamController<SignalingMessage>.broadcast();
 
   Stream<SenderConnectionState> get stateStream => _stateController.stream;
   Stream<String> get errorStream => _errorController.stream;
   Stream<StreamPerformanceStats> get statsStream => _statsController.stream;
+  Stream<SignalingMessage> get prompterMessageStream =>
+      _prompterMessageController.stream;
 
   final List<RTCIceCandidate> _iceCandidateQueue = [];
   bool _hasRemoteDescription = false;
   String? _currentTargetHost;
   StreamingQualityPreset _currentPreset = StreamingQualityPreset.performance540p60;
   CodecEngine _codecEngine = CodecEngine.vp8;
+  StreamSourceType _currentStreamSource = StreamSourceType.screen;
+  CameraFacingMode _currentCameraFacing = CameraFacingMode.environment;
   Timer? _statsTimer;
   int _lastBytesSent = 0;
   int _lastFramesEncoded = 0;
   DateTime? _lastStatsTime;
 
-  /// Starts the ultra-low latency screen mirroring stream
+  StreamSourceType get currentStreamSource => _currentStreamSource;
+  CameraFacingMode get currentCameraFacing => _currentCameraFacing;
+
+  /// Starts the ultra-low latency screen mirroring or direct studio camera stream
   Future<void> startMirroring({
     required String host,
     int port = WebRTCConstants.signalingPort,
     StreamingQualityPreset preset = StreamingQualityPreset.performance540p60,
     CodecEngine codecEngine = CodecEngine.vp8,
+    StreamSourceType streamSource = StreamSourceType.screen,
+    CameraFacingMode cameraFacing = CameraFacingMode.environment,
   }) async {
     _currentTargetHost = host;
     _currentPreset = preset;
     _codecEngine = codecEngine;
+    _currentStreamSource = streamSource;
+    _currentCameraFacing = cameraFacing;
     _iceCandidateQueue.clear();
     _hasRemoteDescription = false;
 
@@ -72,14 +85,27 @@ class SenderWebRTCService {
       // 2. Keep screen on
       await ForegroundServiceHelper.setKeepScreenOn(true);
 
-      // 3. Acquire Display Media
-      _localStream = await navigator.mediaDevices.getDisplayMedia(
-        WebRTCConstants.getDisplayMediaConstraints(preset: preset),
-      );
+      // 3. Acquire Media (Direct Studio Camera or Display Media)
+      if (streamSource == StreamSourceType.studioCamera) {
+        _localStream = await navigator.mediaDevices.getUserMedia(
+          WebRTCConstants.getCameraMediaConstraints(
+            preset: preset,
+            facing: cameraFacing,
+          ),
+        );
+      } else {
+        _localStream = await navigator.mediaDevices.getDisplayMedia(
+          WebRTCConstants.getDisplayMediaConstraints(preset: preset),
+        );
+      }
 
       final videoTracks = _localStream?.getVideoTracks() ?? [];
       if (videoTracks.isEmpty) {
-        throw Exception('No display video track obtained.');
+        throw Exception(
+          streamSource == StreamSourceType.studioCamera
+              ? 'No camera video track obtained.'
+              : 'No display video track obtained.',
+        );
       }
 
       // 4. Bind process to Wi-Fi network interface
@@ -409,6 +435,11 @@ class SenderWebRTCService {
           _sendSignalingMessage(SignalingMessage.pong());
           break;
 
+        case 'prompter_command':
+        case 'prompter_script_update':
+          _prompterMessageController.add(message);
+          break;
+
         case 'bye':
           debugPrint('[SenderWebRTC] Received Bye from receiver.');
           await stopMirroring();
@@ -565,8 +596,37 @@ class SenderWebRTCService {
     debugPrint('[SenderWebRTC] Mirroring session terminated cleanly.');
   }
 
+  /// Seamlessly switches between back and front camera while streaming
+  Future<void> switchCamera() async {
+    if (_localStream == null ||
+        _currentStreamSource != StreamSourceType.studioCamera) {
+      return;
+    }
+    final videoTracks = _localStream!.getVideoTracks();
+    if (videoTracks.isNotEmpty) {
+      try {
+        await Helper.switchCamera(videoTracks.first);
+        _currentCameraFacing =
+            _currentCameraFacing == CameraFacingMode.environment
+                ? CameraFacingMode.user
+                : CameraFacingMode.environment;
+        debugPrint(
+          '[SenderWebRTC] Switched camera to ${_currentCameraFacing.label}',
+        );
+      } catch (e) {
+        debugPrint('[SenderWebRTC] Error switching camera: $e');
+      }
+    }
+  }
+
+  /// Sends prompter state synchronization to connected receiver director
+  void sendPrompterState(Map<String, dynamic> state) {
+    _sendSignalingMessage(SignalingMessage.prompterStateSync(state));
+  }
+
   Future<void> dispose() async {
     await stopMirroring();
+    await _prompterMessageController.close();
     await _stateController.close();
     await _errorController.close();
     await _statsController.close();

@@ -62,9 +62,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: _buildRoleCard(
                                 context: context,
                                 title: 'Receiver Mode',
-                                subtitle: 'Display / Viewfinder Monitor',
+                                subtitle: 'Director Viewfinder & Prompter Master',
                                 description:
-                                    'Acts as the display monitor. Hosts local signaling and renders the incoming screen with zero-latency playout.',
+                                    'Acts as the master monitor. View camera feed, manage teleprompter, framing guides, and stream settings.',
                                 icon: Icons.monitor_rounded,
                                 accentColor: AppTheme.primary,
                                 buttonLabel: 'Start Receiver',
@@ -77,10 +77,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: _buildRoleCard(
                                 context: context,
                                 title: 'Sender Mode',
-                                subtitle: 'Presenter / Screen Caster',
+                                subtitle: 'Camera & Screen Transmitter',
                                 description:
-                                    'Captures and streams this device’s screen or camera feed in real-time to the paired Receiver display.',
-                                icon: Icons.cast_rounded,
+                                    'Silent, battery-efficient hardware video node. Streams 1080p 60fps camera feed to the Director monitor.',
+                                icon: Icons.videocam_rounded,
                                 accentColor: AppTheme.accent,
                                 buttonLabel: 'Start Sender',
                                 isPrimary: false,
@@ -93,9 +93,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         _buildRoleCard(
                           context: context,
                           title: 'Receiver Mode',
-                          subtitle: 'Display / Viewfinder Monitor',
+                          subtitle: 'Director Viewfinder & Prompter Master',
                           description:
-                              'Acts as the display monitor. Hosts local signaling and renders the incoming screen with zero-latency playout.',
+                              'Acts as the master monitor. View camera feed, manage teleprompter, framing guides, and stream settings.',
                           icon: Icons.monitor_rounded,
                           accentColor: AppTheme.primary,
                           buttonLabel: 'Start Receiver',
@@ -106,10 +106,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         _buildRoleCard(
                           context: context,
                           title: 'Sender Mode',
-                          subtitle: 'Presenter / Screen Caster',
+                          subtitle: 'Camera & Screen Transmitter',
                           description:
-                              'Captures and streams this device’s screen or camera feed in real-time to the paired Receiver display.',
-                          icon: Icons.cast_rounded,
+                              'Silent, battery-efficient hardware video node. Streams 1080p 60fps camera feed to the Director monitor.',
+                          icon: Icons.videocam_rounded,
                           accentColor: AppTheme.accent,
                           buttonLabel: 'Start Sender',
                           isPrimary: false,

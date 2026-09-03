@@ -1,5 +1,6 @@
 package com.laithmh.hotspot_screen_sharing
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,29 +9,39 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodChannel
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
-import io.flutter.embedding.android.FlutterActivity
-import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var methodChannel: MethodChannel? = null
     private val channelName = "com.laithmh.hotspot_screen_sharing/foreground_service"
+    private var vadEventChannel: EventChannel? = null
+    private val vadChannelName = "com.laithmh.hotspot_screen_sharing/audio_vad"
 
     companion object {
         var instance: MainActivity? = null
@@ -169,9 +180,29 @@ class MainActivity : FlutterActivity() {
                         val deviceName = if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
                         result.success(deviceName)
                     }
+                    "setVadThreshold" -> {
+                        val threshold = call.argument<Double>("threshold") ?: -42.0
+                        AudioVadEngine.thresholdDb = threshold
+                        result.success(true)
+                    }
+                    "isVadSupported" -> {
+                        result.success(true)
+                    }
                     else -> result.notImplemented()
                 }
             }
+        }
+
+        vadEventChannel = EventChannel(flutterEngine.dartExecutor.binaryMessenger, vadChannelName).apply {
+            setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    AudioVadEngine.start(applicationContext, events)
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    AudioVadEngine.stop()
+                }
+            })
         }
 
         MediaProjectionService.onStopListener = {
@@ -262,6 +293,9 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        try {
+            AudioVadEngine.stop()
+        } catch (_: Exception) {}
         super.onDestroy()
     }
 }
@@ -468,3 +502,122 @@ object NativeUdpRelay {
         publicPort = 0
     }
 }
+
+object AudioVadEngine {
+    private const val TAG = "AudioVadEngine"
+    private const val SAMPLE_RATE = 16000
+    private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
+    private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
+    private const val HANGOVER_MS = 750L // Keep speaking state active during natural pauses between words
+
+    @Volatile
+    var thresholdDb: Double = -50.0 // Studio room speech sensitivity
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @Volatile
+    private var isRunning = false
+    private var recordingThread: Thread? = null
+    private var audioRecord: AudioRecord? = null
+    private var eventSink: EventChannel.EventSink? = null
+
+    @Synchronized
+    fun start(context: Context, sink: EventChannel.EventSink?) {
+        stop()
+        eventSink = sink
+
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            android.util.Log.w(TAG, "Audio recording permission not granted")
+            return
+        }
+
+        val minBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
+        val bufferSize = Math.max(minBufSize, 2048)
+
+        try {
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                SAMPLE_RATE,
+                CHANNEL_CONFIG,
+                AUDIO_FORMAT,
+                bufferSize
+            )
+
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                android.util.Log.e(TAG, "AudioRecord initialization failed")
+                audioRecord?.release()
+                audioRecord = null
+                return
+            }
+
+            audioRecord?.startRecording()
+            isRunning = true
+
+            recordingThread = Thread({
+                val audioBuffer = ShortArray(1024)
+                var lastSpokenTime = 0L
+                var lastReportTime = 0L
+
+                while (isRunning) {
+                    val record = audioRecord ?: break
+                    val readCount = record.read(audioBuffer, 0, audioBuffer.size)
+                    if (readCount > 0) {
+                        var sum = 0.0
+                        for (i in 0 until readCount) {
+                            val sample = audioBuffer[i].toDouble()
+                            sum += sample * sample
+                        }
+                        val rms = Math.sqrt(sum / readCount)
+                        val db = if (rms > 0.0) 20.0 * Math.log10(rms / 32767.0) else -100.0
+                        val audioLevel = (rms / 32767.0).coerceIn(0.0, 1.0)
+                        val now = System.currentTimeMillis()
+
+                        val isSignalAboveThreshold = db >= thresholdDb
+                        if (isSignalAboveThreshold) {
+                            lastSpokenTime = now
+                        }
+
+                        val isSpeaking = (now - lastSpokenTime) < HANGOVER_MS
+
+                        // Report ~25 times per second (every 40ms)
+                        if (now - lastReportTime >= 40) {
+                            lastReportTime = now
+                            val payload = mapOf(
+                                "isSpeaking" to isSpeaking,
+                                "decibels" to db,
+                                "audioLevel" to audioLevel
+                            )
+                            mainHandler.post {
+                                try {
+                                    eventSink?.success(payload)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    }
+                }
+            }, "AudioVadThread").apply {
+                priority = Thread.NORM_PRIORITY
+                isDaemon = true
+                start()
+            }
+            android.util.Log.i(TAG, "AudioVadEngine started successfully at 16kHz")
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Failed to start AudioVadEngine: ${e.localizedMessage}")
+            stop()
+        }
+    }
+
+    @Synchronized
+    fun stop() {
+        isRunning = false
+        try {
+            audioRecord?.stop()
+            audioRecord?.release()
+        } catch (_: Exception) {}
+        audioRecord = null
+        recordingThread?.interrupt()
+        recordingThread = null
+        eventSink = null
+    }
+}
+

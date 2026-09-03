@@ -12,7 +12,6 @@ class AppTheme {
   // Shadows
   static const Color shadowLight = Color(0xFFFFFFFF);
   static const Color shadowDark = Color(0xFFB8C4D6);
-  static const Color shadowDarker = Color(0xFF94A3B8);
 
   // Primary & Accent Colors
   static const Color primary = Color(0xFF0284C7); // Glacier Sky Blue
@@ -46,34 +45,6 @@ class AppTheme {
           offset: Offset(4, 4),
           blurRadius: 8,
           spreadRadius: 1,
-        ),
-      ];
-
-  static List<BoxShadow> get neumorphicShadowDeep => const [
-        BoxShadow(
-          color: shadowLight,
-          offset: Offset(-6, -6),
-          blurRadius: 12,
-          spreadRadius: 1,
-        ),
-        BoxShadow(
-          color: shadowDark,
-          offset: Offset(6, 6),
-          blurRadius: 12,
-          spreadRadius: 1,
-        ),
-      ];
-
-  static List<BoxShadow> get neumorphicShadowSunken => const [
-        BoxShadow(
-          color: shadowDark,
-          offset: Offset(2, 2),
-          blurRadius: 4,
-        ),
-        BoxShadow(
-          color: shadowLight,
-          offset: Offset(-2, -2),
-          blurRadius: 4,
         ),
       ];
 
@@ -151,7 +122,4 @@ class AppTheme {
       ),
     );
   }
-
-  // Backward compatibility alias for main.dart
-  static ThemeData get darkTheme => lightTheme;
 }

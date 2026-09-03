@@ -16,7 +16,40 @@ class PermissionHelper {
     return notifStatus.isGranted;
   }
 
-  /// Explicitly requests notification and nearby Wi-Fi / location permissions needed for hotspot discovery
+  /// Checks if camera permission is granted
+  static Future<bool> hasCameraPermission() async {
+    if (!Platform.isAndroid) return true;
+    return (await Permission.camera.status).isGranted;
+  }
+
+  /// Checks if microphone permission is granted
+  static Future<bool> hasMicPermission() async {
+    if (!Platform.isAndroid) return true;
+    return (await Permission.microphone.status).isGranted;
+  }
+
+  /// Explicitly requests camera and microphone permissions for studio camera and VAD prompter
+  static Future<bool> requestCameraAndMicPermissions(BuildContext context) async {
+    if (!Platform.isAndroid) return true;
+
+    final camStatus = await Permission.camera.request();
+    final micStatus = await Permission.microphone.request();
+
+    if (camStatus.isGranted) {
+      return true;
+    }
+
+    if (camStatus.isPermanentlyDenied || micStatus.isPermanentlyDenied) {
+      if (context.mounted) {
+        showPermissionSettingsDialog(context, isCameraOrMic: true);
+      }
+      return false;
+    }
+
+    return camStatus.isGranted;
+  }
+
+  /// Explicitly requests notification and nearby Wi-Fi permissions needed for hotspot discovery
   static Future<bool> requestPermissions(BuildContext context) async {
     if (!Platform.isAndroid) return true;
 
@@ -43,7 +76,10 @@ class PermissionHelper {
   }
 
   /// Displays an explanation dialog directing the user to Android App Settings
-  static void showPermissionSettingsDialog(BuildContext context) {
+  static void showPermissionSettingsDialog(
+    BuildContext context, {
+    bool isCameraOrMic = false,
+  }) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -63,9 +99,11 @@ class PermissionHelper {
             ),
           ],
         ),
-        content: const Text(
-          'Android requires Notification and Local Network permissions to capture and stream your screen over the Hotspot without being stopped in the background.\n\nPlease enable Notifications in App Settings.',
-          style: TextStyle(
+        content: Text(
+          isCameraOrMic
+              ? 'Camera and Microphone permissions are required for Direct Studio Camera streaming and voice-activated teleprompter scrolling.\n\nPlease enable Camera and Microphone in App Settings.'
+              : 'Android requires Notification and Local Network permissions to capture and stream your screen over the Hotspot without being stopped in the background.\n\nPlease enable Notifications in App Settings.',
+          style: const TextStyle(
             color: AppTheme.textSecondary,
             fontSize: 14,
             height: 1.4,

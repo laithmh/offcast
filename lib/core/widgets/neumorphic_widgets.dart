@@ -240,46 +240,6 @@ class _NeumorphicIconButtonState extends State<NeumorphicIconButton> {
   }
 }
 
-/// Sunken (debossed) inset container for input fields and active tiles
-class NeumorphicSunkenContainer extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-  final double borderRadius;
-  final Color? backgroundColor;
-
-  const NeumorphicSunkenContainer({
-    super.key,
-    required this.child,
-    this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    this.borderRadius = 16,
-    this.backgroundColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: backgroundColor ?? AppTheme.surfaceSunken,
-        borderRadius: BorderRadius.circular(borderRadius),
-        boxShadow: const [
-          BoxShadow(
-            color: AppTheme.shadowDark,
-            offset: Offset(2, 2),
-            blurRadius: 4,
-          ),
-          BoxShadow(
-            color: AppTheme.shadowLight,
-            offset: Offset(-2, -2),
-            blurRadius: 4,
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
-
 /// Status / Telemetry badge with soft neumorphic styling
 class NeumorphicBadge extends StatelessWidget {
   final String label;

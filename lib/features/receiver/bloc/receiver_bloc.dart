@@ -17,6 +17,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
 
   StreamSubscription<bool>? _clientStatusSub;
   StreamSubscription<bool>? _streamingStatusSub;
+  StreamSubscription? _prompterSub;
   Timer? _networkPollTimer;
   String _deviceName = 'Android Display';
 
@@ -28,6 +29,14 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     on<ReceiverStreamingStatusChanged>(_onStreamingStatusChanged);
     on<ReceiverIpSelected>(_onIpSelected);
     on<ReceiverNetworkPolled>(_onNetworkPolled);
+    on<ReceiverFramingModeCycled>(_onFramingModeCycled);
+    on<ReceiverFramingModeSelected>(_onFramingModeSelected);
+    on<ReceiverDirectorPrompterToggled>(_onDirectorPrompterToggled);
+    on<ReceiverPrompterOverlayToggled>(_onPrompterOverlayToggled);
+    on<ReceiverPrompterProgressUpdated>(_onPrompterProgressUpdated);
+    on<ReceiverPrompterStateSynced>(_onPrompterStateSynced);
+    on<ReceiverPrompterCommandDispatched>(_onPrompterCommandDispatched);
+    on<ReceiverPrompterScriptDispatched>(_onPrompterScriptDispatched);
 
     _clientStatusSub = signalingServer.clientConnectionStatus.listen((
       connected,
@@ -37,6 +46,10 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
 
     _streamingStatusSub = webrtcService.isStreaming.listen((streaming) {
       add(ReceiverStreamingStatusChanged(isStreaming: streaming));
+    });
+
+    _prompterSub = webrtcService.prompterStateStream.listen((config) {
+      add(ReceiverPrompterStateSynced(config));
     });
 
     _startNetworkPolling();
@@ -209,11 +222,156 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     emit(state.copyWith(isStreaming: event.isStreaming, status: newStatus));
   }
 
+  void _onFramingModeCycled(
+    ReceiverFramingModeCycled event,
+    Emitter<ReceiverState> emit,
+  ) {
+    final nextIndex =
+        (state.framingMode.index + 1) % SocialFramingMode.values.length;
+    emit(state.copyWith(framingMode: SocialFramingMode.values[nextIndex]));
+  }
+
+  void _onFramingModeSelected(
+    ReceiverFramingModeSelected event,
+    Emitter<ReceiverState> emit,
+  ) {
+    emit(state.copyWith(framingMode: event.mode));
+  }
+
+  void _onDirectorPrompterToggled(
+    ReceiverDirectorPrompterToggled event,
+    Emitter<ReceiverState> emit,
+  ) {
+    emit(state.copyWith(
+      isDirectorPrompterOpen: !state.isDirectorPrompterOpen,
+    ));
+  }
+
+  void _onPrompterStateSynced(
+    ReceiverPrompterStateSynced event,
+    Emitter<ReceiverState> emit,
+  ) {
+    // The Receiver is the master control station.
+    // Only synchronize the scrollProgress reported by the talent display,
+    // NEVER overwrite director scriptText, fontSize, scrollSpeedWpm, or isVoiceActivated!
+    emit(
+      state.copyWith(
+        prompterConfig: state.prompterConfig.copyWith(
+          scrollProgress: event.config.scrollProgress,
+        ),
+      ),
+    );
+  }
+
+  void _onPrompterCommandDispatched(
+    ReceiverPrompterCommandDispatched event,
+    Emitter<ReceiverState> emit,
+  ) {
+    webrtcService.sendPrompterCommand(event.action, event.params);
+
+    // Optimistically update local prompter state on the Director Receiver
+    switch (event.action) {
+      case 'play':
+        emit(
+          state.copyWith(
+            isPrompterOverlayVisible: true,
+            prompterConfig: state.prompterConfig.copyWith(isPlaying: true),
+          ),
+        );
+        break;
+      case 'pause':
+        emit(
+          state.copyWith(
+            prompterConfig: state.prompterConfig.copyWith(isPlaying: false),
+          ),
+        );
+        break;
+      case 'rewind':
+        emit(
+          state.copyWith(
+            prompterConfig: state.prompterConfig.copyWith(scrollProgress: 0.0),
+          ),
+        );
+        break;
+      case 'set_speed':
+        final spd = (event.params?['speedWpm'] as num?)?.toDouble();
+        if (spd != null) {
+          emit(
+            state.copyWith(
+              prompterConfig: state.prompterConfig.copyWith(scrollSpeedWpm: spd),
+            ),
+          );
+        }
+        break;
+      case 'set_font_size':
+        final fs = (event.params?['fontSize'] as num?)?.toDouble();
+        if (fs != null) {
+          emit(
+            state.copyWith(
+              prompterConfig: state.prompterConfig.copyWith(fontSize: fs),
+            ),
+          );
+        }
+        break;
+      case 'set_voice_activated':
+        final va = event.params?['isVoiceActivated'] as bool?;
+        if (va != null) {
+          emit(
+            state.copyWith(
+              prompterConfig: state.prompterConfig.copyWith(isVoiceActivated: va),
+            ),
+          );
+        }
+        break;
+    }
+  }
+
+  void _onPrompterProgressUpdated(
+    ReceiverPrompterProgressUpdated event,
+    Emitter<ReceiverState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        prompterConfig: state.prompterConfig.copyWith(
+          scrollProgress: event.progress,
+        ),
+      ),
+    );
+  }
+
+  void _onPrompterOverlayToggled(
+    ReceiverPrompterOverlayToggled event,
+    Emitter<ReceiverState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        isPrompterOverlayVisible: !state.isPrompterOverlayVisible,
+      ),
+    );
+  }
+
+  void _onPrompterScriptDispatched(
+    ReceiverPrompterScriptDispatched event,
+    Emitter<ReceiverState> emit,
+  ) {
+    webrtcService.sendPrompterScriptUpdate(event.scriptText);
+    emit(
+      state.copyWith(
+        isPrompterOverlayVisible: true,
+        prompterConfig: state.prompterConfig.copyWith(
+          scriptText: event.scriptText,
+          scrollProgress: 0.0,
+        ),
+      ),
+    );
+  }
+
   @override
   Future<void> close() async {
     _networkPollTimer?.cancel();
     await _clientStatusSub?.cancel();
     await _streamingStatusSub?.cancel();
+    await _prompterSub?.cancel();
     await _discoveryBroadcaster.stop();
     await webrtcService.dispose();
     await signalingServer.dispose();

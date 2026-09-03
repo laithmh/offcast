@@ -1,3 +1,30 @@
+enum StreamSourceType {
+  screen(
+    label: 'Screen Mirroring',
+    description: 'Mirror phone display to monitor',
+  ),
+  studioCamera(
+    label: 'Direct Studio Camera',
+    description: 'Clean 1080p 60 FPS hardware camera feed with zero CPU load',
+  );
+
+  final String label;
+  final String description;
+
+  const StreamSourceType({
+    required this.label,
+    required this.description,
+  });
+}
+
+enum CameraFacingMode {
+  environment(label: 'Rear Camera (Studio)'),
+  user(label: 'Front Camera (Selfie)');
+
+  final String label;
+  const CameraFacingMode({required this.label});
+}
+
 enum CodecEngine {
   vp8(
     label: 'Universal Safe (VP8)',
@@ -159,6 +186,31 @@ class WebRTCConstants {
   /// Default display media constraints
   static Map<String, dynamic> get displayMediaConstraints =>
       getDisplayMediaConstraints();
+
+  /// Hardware camera capture constraints (1080p/720p 60/45/30 FPS)
+  static Map<String, dynamic> getCameraMediaConstraints({
+    StreamingQualityPreset preset = StreamingQualityPreset.balanced720p60,
+    CameraFacingMode facing = CameraFacingMode.environment,
+  }) {
+    return {
+      'audio': false,
+      'video': {
+        'facingMode': facing == CameraFacingMode.environment ? 'environment' : 'user',
+        'mandatory': {
+          'minWidth': preset == StreamingQualityPreset.performance540p60 ? 960 : 1280,
+          'minHeight': preset == StreamingQualityPreset.performance540p60 ? 540 : 720,
+          'maxWidth': preset.maxWidth,
+          'maxHeight': preset.maxHeight,
+          'minFrameRate': 30,
+          'maxFrameRate': preset.targetFps,
+        },
+        'optional': <dynamic>[
+          {'googCpuOveruseDetection': false},
+          {'googCpuOveruseThreshold': 100},
+        ],
+      },
+    };
+  }
 
   /// SDP Offer constraints for Sender (Unified Plan)
   static const Map<String, dynamic> senderOfferConstraints = {

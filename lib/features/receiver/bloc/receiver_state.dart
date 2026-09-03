@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../core/models/prompter_model.dart';
+
 enum ReceiverStatus {
   initial,
   starting,
@@ -10,6 +12,18 @@ enum ReceiverStatus {
   stopped,
 }
 
+enum SocialFramingMode {
+  none(label: 'Clean Feed', description: 'No framing overlay'),
+  reels9x16(label: '9:16 Shorts / Reels', description: 'Vertical social safe zone'),
+  youtube16x9(label: '16:9 YouTube', description: 'Widescreen landscape guide'),
+  square1x1(label: '1:1 Square', description: 'Instagram post safe zone'),
+  ruleOfThirds(label: 'Rule of Thirds', description: 'Golden composition grid');
+
+  final String label;
+  final String description;
+  const SocialFramingMode({required this.label, required this.description});
+}
+
 class ReceiverState extends Equatable {
   final ReceiverStatus status;
   final int port;
@@ -17,6 +31,10 @@ class ReceiverState extends Equatable {
   final List<String> availableIps;
   final bool isClientConnected;
   final bool isStreaming;
+  final SocialFramingMode framingMode;
+  final PrompterConfig prompterConfig;
+  final bool isDirectorPrompterOpen;
+  final bool isPrompterOverlayVisible;
   final String? errorMessage;
 
   const ReceiverState({
@@ -26,6 +44,10 @@ class ReceiverState extends Equatable {
     this.availableIps = const [],
     this.isClientConnected = false,
     this.isStreaming = false,
+    this.framingMode = SocialFramingMode.none,
+    this.prompterConfig = const PrompterConfig(),
+    this.isDirectorPrompterOpen = false,
+    this.isPrompterOverlayVisible = true,
     this.errorMessage,
   });
 
@@ -36,6 +58,10 @@ class ReceiverState extends Equatable {
     List<String>? availableIps,
     bool? isClientConnected,
     bool? isStreaming,
+    SocialFramingMode? framingMode,
+    PrompterConfig? prompterConfig,
+    bool? isDirectorPrompterOpen,
+    bool? isPrompterOverlayVisible,
     String? errorMessage,
   }) {
     return ReceiverState(
@@ -45,18 +71,28 @@ class ReceiverState extends Equatable {
       availableIps: availableIps ?? this.availableIps,
       isClientConnected: isClientConnected ?? this.isClientConnected,
       isStreaming: isStreaming ?? this.isStreaming,
+      framingMode: framingMode ?? this.framingMode,
+      prompterConfig: prompterConfig ?? this.prompterConfig,
+      isDirectorPrompterOpen:
+          isDirectorPrompterOpen ?? this.isDirectorPrompterOpen,
+      isPrompterOverlayVisible:
+          isPrompterOverlayVisible ?? this.isPrompterOverlayVisible,
       errorMessage: errorMessage,
     );
   }
 
   @override
   List<Object?> get props => [
-    status,
-    port,
-    localIp,
-    availableIps,
-    isClientConnected,
-    isStreaming,
-    errorMessage,
-  ];
+        status,
+        port,
+        localIp,
+        availableIps,
+        isClientConnected,
+        isStreaming,
+        framingMode,
+        prompterConfig,
+        isDirectorPrompterOpen,
+        isPrompterOverlayVisible,
+        errorMessage,
+      ];
 }

@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import '../../../core/constants/webrtc_constants.dart';
+import '../../../core/models/signaling_message.dart';
 import '../../../core/network/discovery_beacon.dart';
 import '../data/sender_webrtc_service.dart';
 
@@ -16,16 +17,27 @@ class SenderStartSharingRequested extends SenderEvent {
   final int targetPort;
   final StreamingQualityPreset preset;
   final CodecEngine codecEngine;
+  final StreamSourceType streamSource;
+  final CameraFacingMode cameraFacing;
 
   const SenderStartSharingRequested({
     required this.targetHost,
     this.targetPort = 8080,
     this.preset = StreamingQualityPreset.performance540p60,
     this.codecEngine = CodecEngine.vp8,
+    this.streamSource = StreamSourceType.screen,
+    this.cameraFacing = CameraFacingMode.environment,
   });
 
   @override
-  List<Object?> get props => [targetHost, targetPort, preset, codecEngine];
+  List<Object?> get props => [
+        targetHost,
+        targetPort,
+        preset,
+        codecEngine,
+        streamSource,
+        cameraFacing,
+      ];
 }
 
 class SenderStopSharingRequested extends SenderEvent {
@@ -112,4 +124,82 @@ class SenderCodecEngineChanged extends SenderEvent {
 
   @override
   List<Object?> get props => [codecEngine];
+}
+
+class SenderStreamSourceChanged extends SenderEvent {
+  final StreamSourceType streamSource;
+
+  const SenderStreamSourceChanged(this.streamSource);
+
+  @override
+  List<Object?> get props => [streamSource];
+}
+
+class SenderCameraFacingToggled extends SenderEvent {
+  const SenderCameraFacingToggled();
+}
+
+class SenderPrompterScriptUpdated extends SenderEvent {
+  final String scriptText;
+
+  const SenderPrompterScriptUpdated(this.scriptText);
+
+  @override
+  List<Object?> get props => [scriptText];
+}
+
+class SenderPrompterSpeedChanged extends SenderEvent {
+  final double speedWpm;
+
+  const SenderPrompterSpeedChanged(this.speedWpm);
+
+  @override
+  List<Object?> get props => [speedWpm];
+}
+
+class SenderPrompterFontSizeChanged extends SenderEvent {
+  final double fontSize;
+
+  const SenderPrompterFontSizeChanged(this.fontSize);
+
+  @override
+  List<Object?> get props => [fontSize];
+}
+
+class SenderPrompterMirrorToggled extends SenderEvent {
+  const SenderPrompterMirrorToggled();
+}
+
+class SenderPrompterVoiceActivationToggled extends SenderEvent {
+  const SenderPrompterVoiceActivationToggled();
+}
+
+class SenderPrompterPlayPauseToggled extends SenderEvent {
+  const SenderPrompterPlayPauseToggled();
+}
+
+class SenderPrompterRewindRequested extends SenderEvent {
+  const SenderPrompterRewindRequested();
+}
+
+class SenderPrompterOverlayToggled extends SenderEvent {
+  const SenderPrompterOverlayToggled();
+}
+
+class SenderPrompterRemoteMessageReceived extends SenderEvent {
+  final SignalingMessage message;
+
+  const SenderPrompterRemoteMessageReceived(this.message);
+
+  @override
+  List<Object?> get props => [message];
+}
+
+class SenderPrompterProgressUpdated extends SenderEvent {
+  final double progress;
+
+  const SenderPrompterProgressUpdated(this.progress);
+
+  @override
+  List<Object?> get props => [progress];
 }
