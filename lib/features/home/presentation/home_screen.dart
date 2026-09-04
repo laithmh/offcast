@@ -62,9 +62,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: _buildRoleCard(
                                 context: context,
                                 title: 'Receiver Mode',
-                                subtitle: 'Director Viewfinder & Prompter Master',
-                                description:
-                                    'Acts as the master monitor. View camera feed, manage teleprompter, framing guides, and stream settings.',
+                                subtitle: 'Master Monitor & Hotspot Host',
+                                badgeText: 'Recommended Hotspot Host',
+                                description: 'Hosts the local Wi-Fi Hotspot and displays incoming video. Fixed gateway IP (192.168.43.1) guarantees instant zero-config pairing.',
                                 icon: Icons.monitor_rounded,
                                 accentColor: AppTheme.primary,
                                 buttonLabel: 'Start Receiver',
@@ -78,8 +78,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 context: context,
                                 title: 'Sender Mode',
                                 subtitle: 'Camera & Screen Transmitter',
-                                description:
-                                    'Silent, battery-efficient hardware video node. Streams 1080p 60fps camera feed to the Director monitor.',
+                                badgeText: 'Connects to Monitor Wi-Fi',
+                                description: 'Joins the Receiver Wi-Fi. Silent, battery-efficient hardware video node streaming 1080p 60fps camera feed to the monitor.',
                                 icon: Icons.videocam_rounded,
                                 accentColor: AppTheme.accent,
                                 buttonLabel: 'Start Sender',
@@ -93,9 +93,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         _buildRoleCard(
                           context: context,
                           title: 'Receiver Mode',
-                          subtitle: 'Director Viewfinder & Prompter Master',
-                          description:
-                              'Acts as the master monitor. View camera feed, manage teleprompter, framing guides, and stream settings.',
+                          subtitle: 'Master Monitor & Hotspot Host',
+                          badgeText: 'Recommended Hotspot Host',
+                          description: 'Hosts the local Wi-Fi Hotspot and displays incoming video. Fixed gateway IP (192.168.43.1) guarantees instant zero-config pairing.',
                           icon: Icons.monitor_rounded,
                           accentColor: AppTheme.primary,
                           buttonLabel: 'Start Receiver',
@@ -107,8 +107,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           context: context,
                           title: 'Sender Mode',
                           subtitle: 'Camera & Screen Transmitter',
-                          description:
-                              'Silent, battery-efficient hardware video node. Streams 1080p 60fps camera feed to the Director monitor.',
+                          badgeText: 'Connects to Monitor Wi-Fi',
+                          description: 'Joins the Receiver Wi-Fi. Silent, battery-efficient hardware video node streaming 1080p 60fps camera feed to the monitor.',
                           icon: Icons.videocam_rounded,
                           accentColor: AppTheme.accent,
                           buttonLabel: 'Start Sender',
@@ -200,6 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required String buttonLabel,
     required bool isPrimary,
     required VoidCallback onTap,
+    String? badgeText,
   }) {
     return NeumorphicCard(
       borderRadius: 22,
@@ -207,6 +208,44 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (badgeText != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: accentColor.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isPrimary ? Icons.wifi_tethering_rounded : Icons.wifi_rounded,
+                    size: 13,
+                    color: accentColor,
+                  ),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      badgeText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: accentColor,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           Row(
             children: [
               Container(
@@ -259,7 +298,9 @@ class _HomeScreenState extends State<HomeScreen> {
             child: NeumorphicButton(
               onPressed: onTap,
               isPrimary: isPrimary,
-              backgroundColor: isPrimary ? accentColor : AppTheme.surfaceElevated,
+              backgroundColor: isPrimary
+                  ? accentColor
+                  : AppTheme.surfaceElevated,
               textColor: isPrimary ? Colors.white : AppTheme.textPrimary,
               icon: Icons.arrow_forward_rounded,
               child: Text(buttonLabel),
@@ -277,16 +318,37 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.lightbulb_outline_rounded, color: AppTheme.warning, size: 22),
-              SizedBox(width: 10),
-              Text(
-                'Universal 3-Step Setup',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.textPrimary,
+              const Icon(
+                Icons.lightbulb_outline_rounded,
+                color: AppTheme.warning,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Zero-Configuration Setup (Recommended)',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Fastest Setup',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.primary,
+                  ),
                 ),
               ),
             ],
@@ -294,20 +356,20 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 16),
           _buildStepRow(
             number: '1',
-            title: 'Enable Wi-Fi Hotspot on Either Device',
-            subtitle: 'Turn on Portable Hotspot on either device, and connect the other device to its Wi-Fi network.',
+            title: 'Turn On Hotspot on Receiver Monitor',
+            subtitle: 'Enable Portable Hotspot on your tablet or display device. It assigns the fixed gateway IP (192.168.43.1).',
           ),
           const SizedBox(height: 12),
           _buildStepRow(
             number: '2',
-            title: 'Start Receiver on Display Device',
-            subtitle: 'Tap Start Receiver on the device acting as your monitor/viewfinder.',
+            title: 'Connect Camera Phone to that Hotspot',
+            subtitle: 'On your camera phone, join the receiver’s Wi-Fi network. No router or internet connection needed.',
           ),
           const SizedBox(height: 12),
           _buildStepRow(
             number: '3',
-            title: 'Start Sender on Source Device',
-            subtitle: 'Tap Start Sender on the device sharing its screen to automatically pair and stream.',
+            title: 'Open Apps & Tap Broadcast',
+            subtitle: 'Tap Start Receiver on the monitor first, then tap Start Sender on the phone for instant pairing in <1s.',
           ),
         ],
       ),

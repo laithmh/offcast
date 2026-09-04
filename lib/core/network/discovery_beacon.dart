@@ -25,10 +25,24 @@ class DiscoveredDevice {
 
   String get wsUrl => 'ws://$ip:$port';
 
-  factory DiscoveredDevice.fromJson(Map<String, dynamic> json, String senderIp) {
+  factory DiscoveredDevice.fromJson(
+    Map<String, dynamic> json,
+    String senderIp,
+  ) {
+    final claimedIp = json['ip'] as String?;
+    // Only accept claimed IP if it is a valid private IPv4 address; otherwise bind to sender IP
+    final verifiedIp =
+        (claimedIp != null && SdpCandidateSanitizer.isPrivateIPv4(claimedIp))
+        ? claimedIp
+        : senderIp;
+    final parsedPort = (json['port'] as num?)?.toInt() ?? 8080;
+    final validPort = (parsedPort >= 1 && parsedPort <= 65535)
+        ? parsedPort
+        : 8080;
+
     return DiscoveredDevice(
-      ip: json['ip'] as String? ?? senderIp,
-      port: json['port'] as int? ?? 8080,
+      ip: verifiedIp,
+      port: validPort,
       service: json['service'] as String? ?? 'hotspot_screen_sharing',
       deviceName: json['name'] as String? ?? 'Receiver Device',
       lastSeen: DateTime.now(),
@@ -85,7 +99,10 @@ class DiscoveryBroadcaster {
       }
 
       sendAll();
-      _broadcastTimer = Timer.periodic(const Duration(seconds: 1), (_) => sendAll());
+      _broadcastTimer = Timer.periodic(
+        const Duration(seconds: 1),
+        (_) => sendAll(),
+      );
     } catch (e) {
       debugPrint('[DiscoveryBroadcaster] Failed to start UDP broadcaster: $e');
     }
@@ -121,11 +138,13 @@ class DiscoveryListener {
 
       _socket!.listen((RawSocketEvent event) {
         if (event == RawSocketEvent.read) {
-          final datagram = _socket?.receive();
-          if (datagram != null) {
+          while (true) {
+            final datagram = _socket?.receive();
+            if (datagram == null) break;
             try {
               final json = jsonDecode(utf8.decode(datagram.data));
-              if (json is Map<String, dynamic> && json['service'] == serviceName) {
+              if (json is Map<String, dynamic> &&
+                  json['service'] == serviceName) {
                 _deviceController.add(
                   DiscoveredDevice.fromJson(json, datagram.address.address),
                 );
@@ -209,18 +228,21 @@ class NetworkHelper {
 
       for (final iface in interfaces) {
         final name = iface.name.toLowerCase();
-        final isCellular = name.contains('rmnet') ||
+        final isCellular =
+            name.contains('rmnet') ||
             name.contains('ccmni') ||
             name.contains('pdp') ||
             name.contains('wwan') ||
             name.contains('radio') ||
             name.contains('dummy');
 
-        final isUsbTether = name.contains('rndis') ||
+        final isUsbTether =
+            name.contains('rndis') ||
             name.contains('ncm') ||
             name.contains('usb');
 
-        final isWifiOrAp = name.contains('wlan') ||
+        final isWifiOrAp =
+            name.contains('wlan') ||
             name.contains('ap') ||
             name.contains('softap') ||
             name.contains('swlan') ||
@@ -269,7 +291,11 @@ class NetworkHelper {
 
     // Fast probe priority gateways
     for (final ip in priorityIps) {
-      if (await probePort(ip, port, timeout: const Duration(milliseconds: 250))) {
+      if (await probePort(
+        ip,
+        port,
+        timeout: const Duration(milliseconds: 250),
+      )) {
         onFound?.call(ip);
         return ip;
       }

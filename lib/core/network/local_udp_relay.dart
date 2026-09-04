@@ -80,7 +80,8 @@ class LocalUdpRelay {
             final dg = _socket?.receive();
             if (dg == null) break;
 
-            final isLoopback = dg.address.isLoopback ||
+            final isLoopback =
+                dg.address.isLoopback ||
                 dg.address.address == '127.0.0.1' ||
                 dg.address.address == '::1';
 
@@ -91,14 +92,15 @@ class LocalUdpRelay {
               }
             } else {
               // Incoming RTP video media from remote peer -> forward to local WebRTC loopback
-              _remotePeerAddress = dg.address;
+              if (_remotePeerAddress != null &&
+                  _remotePeerAddress!.address != dg.address.address) {
+                // Ignore unauthorized datagrams from rogue IP
+                continue;
+              }
+              _remotePeerAddress ??= dg.address;
               _remotePeerPort = dg.port;
               if (_targetLoopbackPort != null) {
-                _socket?.send(
-                  dg.data,
-                  loopbackAddr,
-                  _targetLoopbackPort!,
-                );
+                _socket?.send(dg.data, loopbackAddr, _targetLoopbackPort!);
               }
             }
           }

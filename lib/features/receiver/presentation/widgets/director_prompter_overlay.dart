@@ -11,6 +11,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../bloc/receiver_bloc.dart';
 import '../../bloc/receiver_event.dart';
 import 'director_prompter_sheet.dart';
+import 'prompter_hud_toolbar.dart';
 
 /// Floating live teleprompter monitor overlay for the Receiver screen.
 /// Enables the director to freely drag text anywhere on screen, toggle transparent
@@ -66,14 +67,19 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
     }
   }
 
+  int _lastProgressUpdateMs = 0;
+
   void _onScrollProgressChanged() {
     if (!_scrollController.hasClients) return;
     final maxScroll = _scrollController.position.maxScrollExtent;
     if (maxScroll > 0) {
       final progress = (_scrollController.offset / maxScroll).clamp(0.0, 1.0);
-      if ((progress - widget.config.scrollProgress).abs() > 0.005 ||
-          progress == 0.0 ||
-          progress == 1.0) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (progress == 0.0 ||
+          progress == 1.0 ||
+          (now - _lastProgressUpdateMs >= 250 &&
+              (progress - widget.config.scrollProgress).abs() >= 0.02)) {
+        _lastProgressUpdateMs = now;
         context
             .read<ReceiverBloc>()
             .add(ReceiverPrompterProgressUpdated(progress));
@@ -264,288 +270,30 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
             GestureDetector(
               onPanUpdate: widget.onPanUpdate,
               behavior: HitTestBehavior.opaque,
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isCompact ? 8 : 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: _isTransparentBackground
-                      ? Colors.black.withValues(alpha: 0.65)
-                      : Colors.black.withValues(alpha: 0.35),
-                  borderRadius: _isTransparentBackground
-                      ? BorderRadius.circular(16)
-                      : null,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.08),
-                    ),
+              child: PrompterHudToolbar(
+                config: widget.config,
+                isPlaying: isPlaying,
+                isSpeaking: _isSpeaking,
+                audioLevel: _audioLevel,
+                isTransparentBackground: _isTransparentBackground,
+                isCustomPositioned: widget.isCustomPositioned,
+                isCompact: isCompact,
+                onRewind: _rewindScript,
+                onTogglePlay: () => bloc.add(
+                  ReceiverPrompterCommandDispatched(
+                    isPlaying ? 'pause' : 'play',
                   ),
                 ),
-                child: Row(
-                  children: [
-                    // Draggable Grip Indicator
-                    Icon(
-                      Icons.drag_indicator_rounded,
-                      size: 18,
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                    const SizedBox(width: 4),
-
-                    // Status Dot
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isPlaying ? AppTheme.success : AppTheme.warning,
-                        boxShadow: [
-                          BoxShadow(
-                            color: (isPlaying ? AppTheme.success : AppTheme.warning)
-                                .withValues(alpha: 0.6),
-                            blurRadius: 6,
-                            spreadRadius: 1,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      isCompact ? 'PROMPTER' : 'PROMPTER MONITOR',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                        color: Colors.white70,
-                      ),
-                    ),
-
-                    // Live VAD Microphone Pill
-                    if (widget.config.isVoiceActivated) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _isSpeaking
-                              ? AppTheme.success.withValues(alpha: 0.25)
-                              : Colors.white10,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: _isSpeaking ? AppTheme.success : Colors.white24,
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.mic_rounded,
-                              size: 12,
-                              color: _isSpeaking ? AppTheme.success : Colors.white54,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              _isSpeaking ? 'SPEAKING' : 'VAD ON',
-                              style: TextStyle(
-                                color: _isSpeaking ? AppTheme.success : Colors.white54,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Container(
-                              width: 18,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: Colors.white12,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                              child: FractionallySizedBox(
-                                alignment: Alignment.centerLeft,
-                                widthFactor: _audioLevel.clamp(0.1, 1.0),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: _isSpeaking ? AppTheme.success : Colors.white30,
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    const Spacer(),
-
-                    // Reading Progress % Pill
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.accent.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: AppTheme.accent.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        '${(widget.config.scrollProgress * 100).round()}%',
-                        style: const TextStyle(
-                          color: AppTheme.accent,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-
-                    // WPM Speed Pill
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: AppTheme.primary.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        '${widget.config.scrollSpeedWpm.toInt()} WPM',
-                        style: const TextStyle(
-                          color: AppTheme.primary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-
-                    // Rewind / Reset Script to Top Button
-                    IconButton(
-                      icon: const Icon(
-                        Icons.replay_rounded,
-                        color: Colors.white70,
-                        size: 19,
-                      ),
-                      tooltip: 'Reset Script to Top',
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
-                      onPressed: _rewindScript,
-                    ),
-
-                    // Play / Pause Button
-                    IconButton(
-                      icon: Icon(
-                        isPlaying
-                            ? Icons.pause_circle_filled_rounded
-                            : Icons.play_circle_fill_rounded,
-                        color: isPlaying ? AppTheme.warning : AppTheme.success,
-                        size: 24,
-                      ),
-                      tooltip: isPlaying ? 'Pause Prompter' : 'Play Prompter',
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
-                      onPressed: () => bloc.add(
-                        ReceiverPrompterCommandDispatched(
-                          isPlaying ? 'pause' : 'play',
-                        ),
-                      ),
-                    ),
-
-                    // Remote Flip Camera Button
-                    IconButton(
-                      icon: const Icon(
-                        Icons.cameraswitch_rounded,
-                        color: AppTheme.accent,
-                        size: 19,
-                      ),
-                      tooltip: 'Remote Flip Camera',
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
-                      onPressed: () => bloc.add(
-                        const ReceiverPrompterCommandDispatched(
-                            'switch_camera'),
-                      ),
-                    ),
-
-                    // Transparent Background Toggle Button
-                    IconButton(
-                      icon: Icon(
-                        _isTransparentBackground
-                            ? Icons.layers_rounded
-                            : Icons.opacity_rounded,
-                        color: _isTransparentBackground
-                            ? AppTheme.accent
-                            : Colors.white70,
-                        size: 19,
-                      ),
-                      tooltip: _isTransparentBackground
-                          ? 'Restore Solid Background'
-                          : 'Remove Background (Transparent Floating Text)',
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
-                      onPressed: () => setState(() =>
-                          _isTransparentBackground =
-                              !_isTransparentBackground),
-                    ),
-
-                    // Reset Position Button (shown if dragged away from center)
-                    if (widget.isCustomPositioned)
-                      IconButton(
-                        icon: const Icon(
-                          Icons.restart_alt_rounded,
-                          color: AppTheme.warning,
-                          size: 20,
-                        ),
-                        tooltip: 'Reset Overlay Position to Bottom Center',
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 30, minHeight: 30),
-                        onPressed: widget.onResetPosition,
-                      ),
-
-                    // Edit Script Button
-                    IconButton(
-                      icon: const Icon(
-                        Icons.edit_note_rounded,
-                        color: AppTheme.primary,
-                        size: 20,
-                      ),
-                      tooltip: 'Edit Script & Settings',
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
-                      onPressed: () => _openScriptEditor(context),
-                    ),
-
-                    // Close / Hide Overlay Button
-                    IconButton(
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: Colors.white54,
-                        size: 18,
-                      ),
-                      tooltip: 'Hide Prompter Monitor',
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 30, minHeight: 30),
-                      onPressed: () =>
-                          bloc.add(const ReceiverPrompterOverlayToggled()),
-                    ),
-                  ],
+                onSwitchCamera: () => bloc.add(
+                  const ReceiverPrompterCommandDispatched('switch_camera'),
                 ),
+                onToggleBackground: () => setState(
+                  () => _isTransparentBackground = !_isTransparentBackground,
+                ),
+                onResetPosition: widget.onResetPosition,
+                onOpenEditor: () => _openScriptEditor(context),
+                onCloseOverlay: () =>
+                    bloc.add(const ReceiverPrompterOverlayToggled()),
               ),
             ),
 

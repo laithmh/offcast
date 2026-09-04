@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../constants/webrtc_constants.dart';
+
 class SignalingMessage {
   final String type;
   final String? sdp;
@@ -16,10 +18,7 @@ class SignalingMessage {
   });
 
   factory SignalingMessage.offer(String sdp) {
-    return SignalingMessage(
-      type: 'offer',
-      sdp: sdp,
-    );
+    return SignalingMessage(type: 'offer', sdp: sdp);
   }
 
   factory SignalingMessage.answer(String sdp) {
@@ -56,11 +55,7 @@ class SignalingMessage {
   }) {
     return SignalingMessage(
       type: 'orientation_change',
-      payload: {
-        'width': width,
-        'height': height,
-        'rotation': rotation,
-      },
+      payload: {'width': width, 'height': height, 'rotation': rotation},
     );
   }
 
@@ -85,10 +80,7 @@ class SignalingMessage {
   }) {
     return SignalingMessage(
       type: 'prompter_command',
-      payload: {
-        'action': action,
-        ...?params,
-      },
+      payload: {'action': action, ...?params},
     );
   }
 
@@ -98,30 +90,43 @@ class SignalingMessage {
   }) {
     return SignalingMessage(
       type: 'prompter_script_update',
-      payload: {
-        'text': text,
-        'title': ?title,
-      },
+      payload: {'text': text, 'title': ?title},
     );
   }
 
   factory SignalingMessage.prompterStateSync(Map<String, dynamic> state) {
+    return SignalingMessage(type: 'prompter_state_sync', payload: state);
+  }
+
+  factory SignalingMessage.streamMetadata({
+    required StreamSourceType streamSource,
+  }) {
     return SignalingMessage(
-      type: 'prompter_state_sync',
-      payload: state,
+      type: 'stream_metadata',
+      payload: {'streamSource': streamSource.name},
     );
   }
 
   factory SignalingMessage.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic>? candidateMap;
+    if (json['candidate'] is Map) {
+      try {
+        candidateMap = Map<String, dynamic>.from(json['candidate'] as Map);
+      } catch (_) {}
+    }
+
+    Map<String, dynamic>? payloadMap;
+    if (json['payload'] is Map) {
+      try {
+        payloadMap = Map<String, dynamic>.from(json['payload'] as Map);
+      } catch (_) {}
+    }
+
     return SignalingMessage(
       type: json['type'] as String? ?? 'unknown',
       sdp: json['sdp'] as String?,
-      candidate: json['candidate'] != null
-          ? Map<String, dynamic>.from(json['candidate'] as Map)
-          : null,
-      payload: json['payload'] != null
-          ? Map<String, dynamic>.from(json['payload'] as Map)
-          : null,
+      candidate: candidateMap,
+      payload: payloadMap,
     );
   }
 
@@ -138,8 +143,8 @@ class SignalingMessage {
   static SignalingMessage? deserialize(String raw) {
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        return SignalingMessage.fromJson(decoded);
+      if (decoded is Map) {
+        return SignalingMessage.fromJson(Map<String, dynamic>.from(decoded));
       }
     } catch (_) {}
     return null;

@@ -118,20 +118,52 @@ class _FramingPainter extends CustomPainter {
       ..strokeWidth = 3.0;
 
     // Top-Left
-    canvas.drawLine(Offset(left, top), Offset(left + tickLength, top), tickPaint);
-    canvas.drawLine(Offset(left, top), Offset(left, top + tickLength), tickPaint);
+    canvas.drawLine(
+      Offset(left, top),
+      Offset(left + tickLength, top),
+      tickPaint,
+    );
+    canvas.drawLine(
+      Offset(left, top),
+      Offset(left, top + tickLength),
+      tickPaint,
+    );
 
     // Top-Right
-    canvas.drawLine(Offset(left + frameW, top), Offset(left + frameW - tickLength, top), tickPaint);
-    canvas.drawLine(Offset(left + frameW, top), Offset(left + frameW, top + tickLength), tickPaint);
+    canvas.drawLine(
+      Offset(left + frameW, top),
+      Offset(left + frameW - tickLength, top),
+      tickPaint,
+    );
+    canvas.drawLine(
+      Offset(left + frameW, top),
+      Offset(left + frameW, top + tickLength),
+      tickPaint,
+    );
 
     // Bottom-Left
-    canvas.drawLine(Offset(left, top + frameH), Offset(left + tickLength, top + frameH), tickPaint);
-    canvas.drawLine(Offset(left, top + frameH), Offset(left, top + frameH - tickLength), tickPaint);
+    canvas.drawLine(
+      Offset(left, top + frameH),
+      Offset(left + tickLength, top + frameH),
+      tickPaint,
+    );
+    canvas.drawLine(
+      Offset(left, top + frameH),
+      Offset(left, top + frameH - tickLength),
+      tickPaint,
+    );
 
     // Bottom-Right
-    canvas.drawLine(Offset(left + frameW, top + frameH), Offset(left + frameW - tickLength, top + frameH), tickPaint);
-    canvas.drawLine(Offset(left + frameW, top + frameH), Offset(left + frameW, top + frameH - tickLength), tickPaint);
+    canvas.drawLine(
+      Offset(left + frameW, top + frameH),
+      Offset(left + frameW - tickLength, top + frameH),
+      tickPaint,
+    );
+    canvas.drawLine(
+      Offset(left + frameW, top + frameH),
+      Offset(left + frameW, top + frameH - tickLength),
+      tickPaint,
+    );
 
     // 4. Center Crosshair
     final centerCrosshairPaint = Paint()
@@ -139,8 +171,16 @@ class _FramingPainter extends CustomPainter {
       ..strokeWidth = 1.0;
     final cx = size.width / 2;
     final cy = size.height / 2;
-    canvas.drawLine(Offset(cx - 15, cy), Offset(cx + 15, cy), centerCrosshairPaint);
-    canvas.drawLine(Offset(cx, cy - 15), Offset(cx, cy + 15), centerCrosshairPaint);
+    canvas.drawLine(
+      Offset(cx - 15, cy),
+      Offset(cx + 15, cy),
+      centerCrosshairPaint,
+    );
+    canvas.drawLine(
+      Offset(cx, cy - 15),
+      Offset(cx, cy + 15),
+      centerCrosshairPaint,
+    );
 
     // 5. Draw label pill
     _drawLabelBadge(canvas, label, borderColor, Offset(cx, top + 18));
@@ -189,8 +229,16 @@ class _FramingPainter extends CustomPainter {
       ..strokeWidth = 1.0;
     final cx = size.width / 2;
     final cy = size.height / 2;
-    canvas.drawLine(Offset(cx - 12, cy), Offset(cx + 12, cy), centerCrosshairPaint);
-    canvas.drawLine(Offset(cx, cy - 12), Offset(cx, cy + 12), centerCrosshairPaint);
+    canvas.drawLine(
+      Offset(cx - 12, cy),
+      Offset(cx + 12, cy),
+      centerCrosshairPaint,
+    );
+    canvas.drawLine(
+      Offset(cx, cy - 12),
+      Offset(cx, cy + 12),
+      centerCrosshairPaint,
+    );
 
     _drawLabelBadge(
       canvas,

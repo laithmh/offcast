@@ -29,7 +29,9 @@ class PermissionHelper {
   }
 
   /// Explicitly requests camera and microphone permissions for studio camera and VAD prompter
-  static Future<bool> requestCameraAndMicPermissions(BuildContext context) async {
+  static Future<bool> requestCameraAndMicPermissions(
+    BuildContext context,
+  ) async {
     if (!Platform.isAndroid) return true;
 
     final camStatus = await Permission.camera.request();

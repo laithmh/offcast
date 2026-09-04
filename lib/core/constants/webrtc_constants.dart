@@ -1,3 +1,5 @@
+export '../utils/sdp_candidate_sanitizer.dart';
+
 enum StreamSourceType {
   screen(
     label: 'Screen Mirroring',
@@ -11,10 +13,7 @@ enum StreamSourceType {
   final String label;
   final String description;
 
-  const StreamSourceType({
-    required this.label,
-    required this.description,
-  });
+  const StreamSourceType({required this.label, required this.description});
 }
 
 enum CameraFacingMode {
@@ -32,16 +31,14 @@ enum CodecEngine {
   ),
   h264(
     label: 'Hardware Turbo (H.264)',
-    description: 'Dedicated silicon acceleration for Snapdragon & Exynos devices',
+    description:
+        'Dedicated silicon acceleration for Snapdragon & Exynos devices',
   );
 
   final String label;
   final String description;
 
-  const CodecEngine({
-    required this.label,
-    required this.description,
-  });
+  const CodecEngine({required this.label, required this.description});
 }
 
 enum StreamingQualityPreset {
@@ -143,7 +140,8 @@ class StreamPerformanceStats {
     );
   }
 
-  String get resolutionText => width > 0 && height > 0 ? '${width}x$height' : '720p';
+  String get resolutionText =>
+      width > 0 && height > 0 ? '${width}x$height' : '720p';
 }
 
 class WebRTCConstants {
@@ -192,19 +190,25 @@ class WebRTCConstants {
     StreamingQualityPreset preset = StreamingQualityPreset.balanced720p60,
     CameraFacingMode facing = CameraFacingMode.environment,
   }) {
+    final isUltra = preset == StreamingQualityPreset.ultra1080p30;
+    final isPerformance = preset == StreamingQualityPreset.performance540p60;
+    final targetW = isUltra ? 1920 : (isPerformance ? 960 : 1280);
+    final targetH = isUltra ? 1080 : (isPerformance ? 540 : 720);
+    final isFront = facing == CameraFacingMode.user;
+
     return {
       'audio': false,
       'video': {
-        'facingMode': facing == CameraFacingMode.environment ? 'environment' : 'user',
+        'facingMode': isFront ? 'user' : 'environment',
         'mandatory': {
-          'minWidth': preset == StreamingQualityPreset.performance540p60 ? 960 : 1280,
-          'minHeight': preset == StreamingQualityPreset.performance540p60 ? 540 : 720,
-          'maxWidth': preset.maxWidth,
-          'maxHeight': preset.maxHeight,
-          'minFrameRate': 30,
+          'minWidth': isFront ? 640 : (isPerformance ? 960 : 1280),
+          'minHeight': isFront ? 480 : (isPerformance ? 540 : 720),
+          'maxWidth': targetW,
+          'maxHeight': targetH,
           'maxFrameRate': preset.targetFps,
         },
         'optional': <dynamic>[
+          {'minFrameRate': 15},
           {'googCpuOveruseDetection': false},
           {'googCpuOveruseThreshold': 100},
         ],
@@ -231,199 +235,3 @@ class WebRTCConstants {
   };
 }
 
-class SdpCandidateSanitizer {
-  static final RegExp _ipv4Pattern = RegExp(
-    r'\b(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b',
-  );
-
-  /// Checks if an IPv4 address is private LAN (10.x, 172.16-31.x, 192.168.x, 100.64-127.x, 169.254.x)
-  static bool isPrivateIPv4(String ip) {
-    if (ip == '127.0.0.1' || ip == '0.0.0.0' || ip.isEmpty) return false;
-    final parts = ip.split('.').map(int.tryParse).toList();
-    if (parts.length != 4 || parts.any((p) => p == null)) return false;
-
-    final p0 = parts[0]!;
-    final p1 = parts[1]!;
-
-    if (p0 == 127 || p0 >= 224 || p0 == 0) return false;
-    if (p0 == 10) return true;
-    if (p0 == 172 && p1 >= 16 && p1 <= 31) return true;
-    if (p0 == 192 && p1 == 168) return true;
-    if (p0 == 100 && p1 >= 64 && p1 <= 127) return true;
-    if (p0 == 169 && p1 == 254) return true;
-
-    return false;
-  }
-
-  /// Filters out cellular / public / IPv6 link-local and maps loopback (127.0.0.1) to verified private LAN IP
-  static String? sanitizeCandidate(String? candidate, String? fallbackIp) {
-    if (candidate == null || candidate.trim().isEmpty) return null;
-
-    final lower = candidate.toLowerCase();
-
-    // 1. Discard IPv6 localhost and link-local candidates
-    if (lower.contains('::1') ||
-        lower.contains('fe80:') ||
-        lower.contains('localhost')) {
-      return null;
-    }
-
-    // 2. Discard mobile cellular interface keywords
-    if (lower.contains('rmnet') ||
-        lower.contains('ccmni') ||
-        lower.contains('pdp') ||
-        lower.contains('wwan') ||
-        lower.contains('dummy')) {
-      return null;
-    }
-
-    var cand = candidate;
-
-    // 3. Handle mDNS .local hostname resolution if present
-    if (cand.contains('.local') && fallbackIp != null && isPrivateIPv4(fallbackIp)) {
-      cand = cand.replaceAll(RegExp(r'[a-zA-Z0-9_\.\-]+\.local'), fallbackIp);
-    }
-
-    // 4. If candidate contains 127.0.0.1 or 0.0.0.0, remap to known private LAN IP
-    if (cand.contains('127.0.0.1') || cand.contains('0.0.0.0')) {
-      if (fallbackIp != null && isPrivateIPv4(fallbackIp)) {
-        cand = cand.replaceAll('127.0.0.1', fallbackIp).replaceAll('0.0.0.0', fallbackIp);
-      } else {
-        return null;
-      }
-    }
-
-    // 5. Verify candidate IP is a valid private IPv4 address
-    final match = _ipv4Pattern.firstMatch(cand);
-    if (match != null) {
-      final ip = match.group(0)!;
-      if (!isPrivateIPv4(ip)) {
-        if (fallbackIp != null && isPrivateIPv4(fallbackIp)) {
-          cand = cand.replaceAll(ip, fallbackIp);
-        } else {
-          return null;
-        }
-      }
-    }
-
-    return cand;
-  }
-
-  /// Detects whether incoming SDP prioritized VP8 or H.264
-  static CodecEngine detectCodecEngine(String? sdp) {
-    if (sdp == null) return CodecEngine.vp8;
-    for (final line in sdp.split(RegExp(r'\r?\n'))) {
-      if (line.startsWith('m=video ')) {
-        final parts = line.split(' ');
-        if (parts.length > 3 && parts[3] == '100') {
-          return CodecEngine.h264;
-        }
-        break;
-      }
-    }
-    return CodecEngine.vp8;
-  }
-
-  /// Sanitizes full SDP description by mapping 127.0.0.1 to valid local private IP,
-  /// prioritizing chosen codec (VP8 or H.264), pacing decoder frames, and enabling PLI/NACK feedback
-  static String sanitizeSdp(
-    String? sdp,
-    String? localIp, {
-    int bitrateKbps = 4000,
-    CodecEngine codecEngine = CodecEngine.vp8,
-  }) {
-    if (sdp == null || sdp.isEmpty) return '';
-
-    final lines = sdp.split(RegExp(r'\r?\n'));
-    final filteredLines = <String>[];
-
-    for (final line in lines) {
-      if (line.startsWith('a=candidate:')) {
-        final lower = line.toLowerCase();
-        if (lower.contains('::1') ||
-            lower.contains('fe80:') ||
-            lower.contains('localhost') ||
-            lower.contains('rmnet') ||
-            lower.contains('ccmni') ||
-            lower.contains('pdp')) {
-          continue; // Drop non-routable / cellular candidate line
-        }
-      }
-
-      var sanitizedLine = line;
-      if (localIp != null && isPrivateIPv4(localIp)) {
-        sanitizedLine = sanitizedLine
-            .replaceAll('127.0.0.1', localIp)
-            .replaceAll('0.0.0.0', localIp)
-            .replaceAll(RegExp(r'[a-zA-Z0-9_\.\-]+\.local'), localIp);
-      }
-
-      // Prioritize chosen codec engine in m=video line
-      if (sanitizedLine.startsWith('m=video ')) {
-        final parts = sanitizedLine.split(' ');
-        if (parts.length > 3) {
-          final prefix = parts.sublist(0, 3).join(' ');
-          final payloads = parts.sublist(3);
-          if (codecEngine == CodecEngine.vp8) {
-            if (payloads.contains('96')) {
-              payloads.remove('96');
-              payloads.insert(0, '96');
-            }
-            if (payloads.contains('97')) {
-              payloads.remove('97');
-              payloads.insert(1, '97');
-            }
-          } else {
-            if (payloads.contains('100')) {
-              payloads.remove('100');
-              payloads.insert(0, '100');
-            }
-            if (payloads.contains('102')) {
-              payloads.remove('102');
-              payloads.insert(1, '102');
-            }
-          }
-          sanitizedLine = '$prefix ${payloads.join(' ')}';
-        }
-      }
-
-      // Add instant start bitrate to VP8 to eliminate the 45-second ramp-up delay
-      if (sanitizedLine.startsWith('a=rtpmap:96 VP8/90000')) {
-        final minB = (bitrateKbps * 0.7).toInt();
-        final startB = (bitrateKbps * 0.9).toInt();
-        filteredLines.add(sanitizedLine);
-        filteredLines.add(
-          'a=fmtp:96 x-google-min-bitrate=$minB;x-google-start-bitrate=$startB;x-google-max-bitrate=$bitrateKbps',
-        );
-        continue;
-      }
-
-      // Standardize H.264 fmtp into Hardware Level 4.0 Baseline (42e028) as backup
-      if (sanitizedLine.startsWith('a=fmtp:100 ')) {
-        final minB = (bitrateKbps * 0.7).toInt();
-        final startB = (bitrateKbps * 0.9).toInt();
-        sanitizedLine =
-            'a=fmtp:100 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e028;x-google-min-bitrate=$minB;x-google-start-bitrate=$startB;x-google-max-bitrate=$bitrateKbps';
-      }
-
-      filteredLines.add(sanitizedLine);
-
-      // Inject bandwidth limits and RTCP feedback for both VP8 (96) and H.264 (100)
-      if (sanitizedLine.startsWith('m=video ')) {
-        filteredLines.add('b=AS:$bitrateKbps');
-        filteredLines.add('b=TIAS:${bitrateKbps * 1000}');
-        filteredLines.add('a=playout-delay:0 15');
-        filteredLines.add('a=rtcp-fb:96 nack');
-        filteredLines.add('a=rtcp-fb:96 nack pli');
-        filteredLines.add('a=rtcp-fb:96 goog-remb');
-        filteredLines.add('a=rtcp-fb:96 transport-cc');
-        filteredLines.add('a=rtcp-fb:100 nack');
-        filteredLines.add('a=rtcp-fb:100 nack pli');
-        filteredLines.add('a=rtcp-fb:100 goog-remb');
-        filteredLines.add('a=rtcp-fb:100 transport-cc');
-      }
-    }
-
-    return filteredLines.join('\r\n');
-  }
-}

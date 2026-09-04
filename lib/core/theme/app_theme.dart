@@ -34,19 +34,19 @@ class AppTheme {
 
   // Neumorphic Decorations
   static List<BoxShadow> get neumorphicShadowElevated => const [
-        BoxShadow(
-          color: shadowLight,
-          offset: Offset(-4, -4),
-          blurRadius: 8,
-          spreadRadius: 1,
-        ),
-        BoxShadow(
-          color: shadowDark,
-          offset: Offset(4, 4),
-          blurRadius: 8,
-          spreadRadius: 1,
-        ),
-      ];
+    BoxShadow(
+      color: shadowLight,
+      offset: Offset(-4, -4),
+      blurRadius: 8,
+      spreadRadius: 1,
+    ),
+    BoxShadow(
+      color: shadowDark,
+      offset: Offset(4, 4),
+      blurRadius: 8,
+      spreadRadius: 1,
+    ),
+  ];
 
   static ThemeData get lightTheme {
     return ThemeData(
@@ -78,9 +78,7 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: surface,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -117,7 +115,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: primary, width: 2),
         ),
-        labelStyle: const TextStyle(color: textSecondary, fontWeight: FontWeight.w500),
+        labelStyle: const TextStyle(
+          color: textSecondary,
+          fontWeight: FontWeight.w500,
+        ),
         hintStyle: const TextStyle(color: textMuted),
       ),
     );

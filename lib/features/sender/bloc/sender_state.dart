@@ -85,20 +85,20 @@ class SenderState extends Equatable {
 
   @override
   List<Object?> get props => [
-        status,
-        targetHost,
-        targetPort,
-        discoveredDevice,
-        isAutoDiscovered,
-        isScanning,
-        isVerified,
-        clientIp,
-        preset,
-        codecEngine,
-        streamSource,
-        cameraFacing,
-        prompterConfig,
-        isPrompterOverlay,
-        errorMessage,
-      ];
+    status,
+    targetHost,
+    targetPort,
+    discoveredDevice,
+    isAutoDiscovered,
+    isScanning,
+    isVerified,
+    clientIp,
+    preset,
+    codecEngine,
+    streamSource,
+    cameraFacing,
+    prompterConfig,
+    isPrompterOverlay,
+    errorMessage,
+  ];
 }

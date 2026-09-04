@@ -167,7 +167,11 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     SenderClientIpDetected event,
     Emitter<SenderState> emit,
   ) {
-    emit(state.copyWith(clientIp: event.clientIp.isNotEmpty ? event.clientIp : null));
+    emit(
+      state.copyWith(
+        clientIp: event.clientIp.isNotEmpty ? event.clientIp : null,
+      ),
+    );
   }
 
   void _onGatewayDetected(
@@ -207,8 +211,10 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     SenderCameraFacingToggled event,
     Emitter<SenderState> emit,
   ) async {
-    await webrtcService.switchCamera();
-    emit(state.copyWith(cameraFacing: webrtcService.currentCameraFacing));
+    final success = await webrtcService.switchCamera();
+    if (success) {
+      emit(state.copyWith(cameraFacing: webrtcService.currentCameraFacing));
+    }
   }
 
   void _onPrompterScriptUpdated(
@@ -226,8 +232,9 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     SenderPrompterSpeedChanged event,
     Emitter<SenderState> emit,
   ) {
-    final updated =
-        state.prompterConfig.copyWith(scrollSpeedWpm: event.speedWpm);
+    final updated = state.prompterConfig.copyWith(
+      scrollSpeedWpm: event.speedWpm,
+    );
     emit(state.copyWith(prompterConfig: updated));
     if (state.isStreaming) {
       webrtcService.sendPrompterState(updated.toJson());
@@ -249,8 +256,9 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     SenderPrompterMirrorToggled event,
     Emitter<SenderState> emit,
   ) {
-    final updated = state.prompterConfig
-        .copyWith(isMirrored: !state.prompterConfig.isMirrored);
+    final updated = state.prompterConfig.copyWith(
+      isMirrored: !state.prompterConfig.isMirrored,
+    );
     emit(state.copyWith(prompterConfig: updated));
     if (state.isStreaming) {
       webrtcService.sendPrompterState(updated.toJson());
@@ -261,8 +269,9 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     SenderPrompterVoiceActivationToggled event,
     Emitter<SenderState> emit,
   ) {
-    final updated = state.prompterConfig
-        .copyWith(isVoiceActivated: !state.prompterConfig.isVoiceActivated);
+    final updated = state.prompterConfig.copyWith(
+      isVoiceActivated: !state.prompterConfig.isVoiceActivated,
+    );
     emit(state.copyWith(prompterConfig: updated));
     if (state.isStreaming) {
       webrtcService.sendPrompterState(updated.toJson());
@@ -273,8 +282,9 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     SenderPrompterPlayPauseToggled event,
     Emitter<SenderState> emit,
   ) {
-    final updated =
-        state.prompterConfig.copyWith(isPlaying: !state.prompterConfig.isPlaying);
+    final updated = state.prompterConfig.copyWith(
+      isPlaying: !state.prompterConfig.isPlaying,
+    );
     emit(state.copyWith(prompterConfig: updated));
     if (state.isStreaming) {
       webrtcService.sendPrompterState(updated.toJson());
@@ -312,10 +322,10 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     );
   }
 
-  void _onPrompterRemoteMessageReceived(
+  Future<void> _onPrompterRemoteMessageReceived(
     SenderPrompterRemoteMessageReceived event,
     Emitter<SenderState> emit,
-  ) {
+  ) async {
     final msg = event.message;
     if (msg.type == 'prompter_script_update') {
       final text = msg.payload?['text'] as String?;
@@ -343,8 +353,9 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
         case 'rewind':
           emit(
             state.copyWith(
-              prompterConfig:
-                  state.prompterConfig.copyWith(scrollProgress: 0.0),
+              prompterConfig: state.prompterConfig.copyWith(
+                scrollProgress: 0.0,
+              ),
             ),
           );
           break;
@@ -353,8 +364,9 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
           if (spd != null) {
             emit(
               state.copyWith(
-                prompterConfig:
-                    state.prompterConfig.copyWith(scrollSpeedWpm: spd),
+                prompterConfig: state.prompterConfig.copyWith(
+                  scrollSpeedWpm: spd,
+                ),
               ),
             );
           }
@@ -374,19 +386,20 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
           if (va != null) {
             emit(
               state.copyWith(
-                prompterConfig:
-                    state.prompterConfig.copyWith(isVoiceActivated: va),
+                prompterConfig: state.prompterConfig.copyWith(
+                  isVoiceActivated: va,
+                ),
               ),
             );
           }
           break;
         case 'switch_camera':
-          webrtcService.switchCamera();
-          emit(
-            state.copyWith(
-              cameraFacing: webrtcService.currentCameraFacing,
-            ),
-          );
+          final success = await webrtcService.switchCamera();
+          if (success) {
+            emit(
+              state.copyWith(cameraFacing: webrtcService.currentCameraFacing),
+            );
+          }
           break;
       }
     }

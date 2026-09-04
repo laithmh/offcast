@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/constants/webrtc_constants.dart';
 import '../../../core/network/discovery_beacon.dart';
 import '../../../core/services/foreground_service_helper.dart';
 import '../data/embedded_signaling_server.dart';
@@ -18,11 +19,12 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
   StreamSubscription<bool>? _clientStatusSub;
   StreamSubscription<bool>? _streamingStatusSub;
   StreamSubscription? _prompterSub;
+  StreamSubscription? _streamSourceSub;
   Timer? _networkPollTimer;
   String _deviceName = 'Android Display';
 
   ReceiverBloc({required this.signalingServer, required this.webrtcService})
-      : super(const ReceiverState()) {
+    : super(const ReceiverState()) {
     on<ReceiverStartServerRequested>(_onStartServer);
     on<ReceiverStopServerRequested>(_onStopServer);
     on<ReceiverClientStatusChanged>(_onClientStatusChanged);
@@ -37,6 +39,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     on<ReceiverPrompterStateSynced>(_onPrompterStateSynced);
     on<ReceiverPrompterCommandDispatched>(_onPrompterCommandDispatched);
     on<ReceiverPrompterScriptDispatched>(_onPrompterScriptDispatched);
+    on<ReceiverStreamSourceChanged>(_onStreamSourceChanged);
 
     _clientStatusSub = signalingServer.clientConnectionStatus.listen((
       connected,
@@ -52,6 +55,10 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
       add(ReceiverPrompterStateSynced(config));
     });
 
+    _streamSourceSub = webrtcService.streamSourceStream.listen((source) {
+      add(ReceiverStreamSourceChanged(source));
+    });
+
     _startNetworkPolling();
   }
 
@@ -64,10 +71,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
         final detectedIp = allIps.isNotEmpty ? allIps.first : null;
         if (!isClosed) {
           add(
-            ReceiverNetworkPolled(
-              detectedIp: detectedIp,
-              availableIps: allIps,
-            ),
+            ReceiverNetworkPolled(detectedIp: detectedIp, availableIps: allIps),
           );
         }
       } catch (_) {}
@@ -93,7 +97,8 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
       );
 
       // Re-broadcast UDP beacon on the newly detected IP
-      if (event.detectedIp != null && state.status == ReceiverStatus.listening) {
+      if (event.detectedIp != null &&
+          state.status == ReceiverStatus.listening) {
         _discoveryBroadcaster.start(
           localIp: event.detectedIp!,
           signalingPort: state.port,
@@ -187,13 +192,14 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
   ) {
     final newStatus = event.isClientConnected
         ? (state.isStreaming
-            ? ReceiverStatus.streaming
-            : ReceiverStatus.clientConnected)
+              ? ReceiverStatus.streaming
+              : ReceiverStatus.clientConnected)
         : ReceiverStatus.listening;
 
     if (event.isClientConnected) {
       _discoveryBroadcaster.stop();
-    } else if (state.localIp != null && state.status == ReceiverStatus.listening) {
+    } else if (state.localIp != null &&
+        state.status == ReceiverStatus.listening) {
       _discoveryBroadcaster.start(
         localIp: state.localIp!,
         signalingPort: state.port,
@@ -216,8 +222,8 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     final newStatus = event.isStreaming
         ? ReceiverStatus.streaming
         : (state.isClientConnected
-            ? ReceiverStatus.clientConnected
-            : ReceiverStatus.listening);
+              ? ReceiverStatus.clientConnected
+              : ReceiverStatus.listening);
 
     emit(state.copyWith(isStreaming: event.isStreaming, status: newStatus));
   }
@@ -242,9 +248,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     ReceiverDirectorPrompterToggled event,
     Emitter<ReceiverState> emit,
   ) {
-    emit(state.copyWith(
-      isDirectorPrompterOpen: !state.isDirectorPrompterOpen,
-    ));
+    emit(state.copyWith(isDirectorPrompterOpen: !state.isDirectorPrompterOpen));
   }
 
   void _onPrompterStateSynced(
@@ -298,7 +302,9 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
         if (spd != null) {
           emit(
             state.copyWith(
-              prompterConfig: state.prompterConfig.copyWith(scrollSpeedWpm: spd),
+              prompterConfig: state.prompterConfig.copyWith(
+                scrollSpeedWpm: spd,
+              ),
             ),
           );
         }
@@ -318,7 +324,9 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
         if (va != null) {
           emit(
             state.copyWith(
-              prompterConfig: state.prompterConfig.copyWith(isVoiceActivated: va),
+              prompterConfig: state.prompterConfig.copyWith(
+                isVoiceActivated: va,
+              ),
             ),
           );
         }
@@ -344,9 +352,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     Emitter<ReceiverState> emit,
   ) {
     emit(
-      state.copyWith(
-        isPrompterOverlayVisible: !state.isPrompterOverlayVisible,
-      ),
+      state.copyWith(isPrompterOverlayVisible: !state.isPrompterOverlayVisible),
     );
   }
 
@@ -366,12 +372,29 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     );
   }
 
+  void _onStreamSourceChanged(
+    ReceiverStreamSourceChanged event,
+    Emitter<ReceiverState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        streamSource: event.streamSource,
+        // In screen mirror mode, immediately ensure the teleprompter overlay is hidden
+        isPrompterOverlayVisible:
+            event.streamSource == StreamSourceType.studioCamera
+            ? state.isPrompterOverlayVisible
+            : false,
+      ),
+    );
+  }
+
   @override
   Future<void> close() async {
     _networkPollTimer?.cancel();
     await _clientStatusSub?.cancel();
     await _streamingStatusSub?.cancel();
     await _prompterSub?.cancel();
+    await _streamSourceSub?.cancel();
     await _discoveryBroadcaster.stop();
     await webrtcService.dispose();
     await signalingServer.dispose();

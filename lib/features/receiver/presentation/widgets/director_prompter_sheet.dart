@@ -34,9 +34,7 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
   void _pushScript() {
     final text = _scriptController.text.trim();
     if (text.isNotEmpty) {
-      context
-          .read<ReceiverBloc>()
-          .add(ReceiverPrompterScriptDispatched(text));
+      context.read<ReceiverBloc>().add(ReceiverPrompterScriptDispatched(text));
       setState(() => _isEditing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -80,82 +78,92 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-              // 1. Drag handle
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 8),
-                  width: 44,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-
-              // 2. Header
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.subtitles_rounded,
-                        color: AppTheme.primary, size: 22),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'Director Prompter Remote',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
+                  // 1. Drag handle
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 12, bottom: 8),
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-              ),
-
-              const Divider(height: 1, color: Colors.white12),
-
-              // 3. Scrollable Controls Body
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Reading Progress Bar
-                      _buildProgressIndicator(prompter.scrollProgress),
-                      const SizedBox(height: 16),
-
-                      // Quick Transport Controls
-                      _buildTransportControls(prompter),
-                      const SizedBox(height: 20),
-
-                      // Speed and Font Size Sliders
-                      _buildParameterSliders(prompter),
-                      const SizedBox(height: 20),
-
-                      // Live Script Editor Section
-                      _buildScriptEditorSection(),
-                    ],
                   ),
-                ),
+
+                  // 2. Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.subtitles_rounded,
+                          color: AppTheme.primary,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Director Prompter Remote',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const Divider(height: 1, color: Colors.white12),
+
+                  // 3. Scrollable Controls Body
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Reading Progress Bar
+                          _buildProgressIndicator(prompter.scrollProgress),
+                          const SizedBox(height: 16),
+
+                          // Quick Transport Controls
+                          _buildTransportControls(prompter),
+                          const SizedBox(height: 20),
+
+                          // Speed and Font Size Sliders
+                          _buildParameterSliders(prompter),
+                          const SizedBox(height: 20),
+
+                          // Live Script Editor Section
+                          _buildScriptEditorSection(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
-  },
-);
-}
+  }
 
   Widget _buildProgressIndicator(double progress) {
     return Column(
@@ -227,8 +235,7 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
           GestureDetector(
             onTap: () {
               bloc.add(
-                ReceiverPrompterCommandDispatched(
-                    isPlaying ? 'pause' : 'play'),
+                ReceiverPrompterCommandDispatched(isPlaying ? 'pause' : 'play'),
               );
             },
             child: Container(
@@ -294,7 +301,11 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
           // WPM Speed
           Row(
             children: [
-              const Icon(Icons.speed_rounded, color: AppTheme.primary, size: 18),
+              const Icon(
+                Icons.speed_rounded,
+                color: AppTheme.primary,
+                size: 18,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Speed: ${speed.round()} WPM',
@@ -314,8 +325,9 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                   inactiveColor: Colors.white12,
                   onChanged: (val) {
                     bloc.add(
-                      ReceiverPrompterCommandDispatched(
-                          'set_speed', {'speedWpm': val}),
+                      ReceiverPrompterCommandDispatched('set_speed', {
+                        'speedWpm': val,
+                      }),
                     );
                   },
                 ),
@@ -327,8 +339,11 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
           // Font Size
           Row(
             children: [
-              const Icon(Icons.format_size_rounded,
-                  color: AppTheme.accent, size: 18),
+              const Icon(
+                Icons.format_size_rounded,
+                color: AppTheme.accent,
+                size: 18,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Font: ${font.round()}pt',
@@ -348,8 +363,9 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                   inactiveColor: Colors.white12,
                   onChanged: (val) {
                     bloc.add(
-                      ReceiverPrompterCommandDispatched(
-                          'set_font_size', {'fontSize': val}),
+                      ReceiverPrompterCommandDispatched('set_font_size', {
+                        'fontSize': val,
+                      }),
                     );
                   },
                 ),
@@ -399,9 +415,9 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
           ),
           onChanged: (text) {
             if (!_isEditing) setState(() => _isEditing = true);
-            context
-                .read<ReceiverBloc>()
-                .add(ReceiverPrompterScriptDispatched(text));
+            context.read<ReceiverBloc>().add(
+              ReceiverPrompterScriptDispatched(text),
+            );
           },
           decoration: InputDecoration(
             hintText: 'Type or edit teleprompter script...',

@@ -7,7 +7,10 @@ void main() {
   group('PrompterConfig Tests', () {
     test('Default values are correctly initialized', () {
       const config = PrompterConfig();
-      expect(config.scriptText, contains('Welcome to the live studio broadcast'));
+      expect(
+        config.scriptText,
+        contains('Welcome to the live studio broadcast'),
+      );
       expect(config.scrollSpeedWpm, 140.0);
       expect(config.fontSize, 32.0);
       expect(config.isMirrored, isFalse);
@@ -71,7 +74,10 @@ void main() {
       expect(config130.pixelsPerSecond, closeTo(expected130, 0.01));
 
       const config260 = PrompterConfig(scrollSpeedWpm: 260.0, fontSize: 32.0);
-      expect(config260.pixelsPerSecond, closeTo(config130.pixelsPerSecond * 2, 0.01));
+      expect(
+        config260.pixelsPerSecond,
+        closeTo(config130.pixelsPerSecond * 2, 0.01),
+      );
     });
   });
 
@@ -96,14 +102,17 @@ void main() {
       expect(eventSilence.isSpeaking, isFalse);
     });
 
-    test('AudioVadService gracefully handles non-Android platform fallback', () async {
-      final vad = AudioVadService();
-      // On desktop test runner, method channel falls back to no-op
-      await vad.start();
-      await vad.setThreshold(-32.0);
-      await vad.stop();
-      vad.dispose();
-    });
+    test(
+      'AudioVadService gracefully handles non-Android platform fallback',
+      () async {
+        final vad = AudioVadService();
+        // On desktop test runner, method channel falls back to no-op
+        await vad.start();
+        await vad.setThreshold(-32.0);
+        await vad.stop();
+        vad.dispose();
+      },
+    );
   });
 
   group('Camera Stream & Facing Modes Tests', () {
@@ -114,25 +123,28 @@ void main() {
       expect(CameraFacingMode.user.label, 'Front Camera (Selfie)');
     });
 
-    test('WebRTCConstants.getCameraMediaConstraints returns correct constraints', () {
-      final backConstraints = WebRTCConstants.getCameraMediaConstraints(
-        preset: StreamingQualityPreset.ultra1080p30,
-        facing: CameraFacingMode.environment,
-      );
+    test(
+      'WebRTCConstants.getCameraMediaConstraints returns correct constraints',
+      () {
+        final backConstraints = WebRTCConstants.getCameraMediaConstraints(
+          preset: StreamingQualityPreset.ultra1080p30,
+          facing: CameraFacingMode.environment,
+        );
 
-      final video = backConstraints['video'] as Map<String, dynamic>;
-      expect(video['facingMode'], 'environment');
-      final mandatory = video['mandatory'] as Map<String, dynamic>;
-      expect(mandatory['minWidth'], 1280);
-      expect(mandatory['minHeight'], 720);
-      expect(mandatory['maxFrameRate'], 30);
+        final video = backConstraints['video'] as Map<String, dynamic>;
+        expect(video['facingMode'], 'environment');
+        final mandatory = video['mandatory'] as Map<String, dynamic>;
+        expect(mandatory['minWidth'], 1280);
+        expect(mandatory['minHeight'], 720);
+        expect(mandatory['maxFrameRate'], 30);
 
-      final frontConstraints = WebRTCConstants.getCameraMediaConstraints(
-        preset: StreamingQualityPreset.balanced720p60,
-        facing: CameraFacingMode.user,
-      );
-      final frontVideo = frontConstraints['video'] as Map<String, dynamic>;
-      expect(frontVideo['facingMode'], 'user');
-    });
+        final frontConstraints = WebRTCConstants.getCameraMediaConstraints(
+          preset: StreamingQualityPreset.balanced720p60,
+          facing: CameraFacingMode.user,
+        );
+        final frontVideo = frontConstraints['video'] as Map<String, dynamic>;
+        expect(frontVideo['facingMode'], 'user');
+      },
+    );
   });
 }

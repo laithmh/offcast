@@ -31,13 +31,13 @@ class SenderStartSharingRequested extends SenderEvent {
 
   @override
   List<Object?> get props => [
-        targetHost,
-        targetPort,
-        preset,
-        codecEngine,
-        streamSource,
-        cameraFacing,
-      ];
+    targetHost,
+    targetPort,
+    preset,
+    codecEngine,
+    streamSource,
+    cameraFacing,
+  ];
 }
 
 class SenderStopSharingRequested extends SenderEvent {

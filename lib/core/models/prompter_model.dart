@@ -92,13 +92,13 @@ Have a great take!''';
 
   @override
   List<Object?> get props => [
-        scriptText,
-        scrollSpeedWpm,
-        fontSize,
-        isMirrored,
-        isVoiceActivated,
-        isPlaying,
-        scrollProgress,
-        countdown,
-      ];
+    scriptText,
+    scrollSpeedWpm,
+    fontSize,
+    isMirrored,
+    isVoiceActivated,
+    isPlaying,
+    scrollProgress,
+    countdown,
+  ];
 }

@@ -1,39 +1,19 @@
 package com.laithmh.hotspot_screen_sharing
 
-import android.Manifest
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.IBinder
-import android.os.Looper
 import android.os.PowerManager
 import android.view.WindowManager
-import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
-import java.net.InetSocketAddress
 
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
@@ -56,7 +36,12 @@ class MainActivity : FlutterActivity() {
                 setReferenceCounted(true)
                 acquire()
             }
-            wifiLock = wifiManager?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "HotspotHighPerfWifiLock")?.apply {
+            val wifiMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+            } else {
+                WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            }
+            wifiLock = wifiManager?.createWifiLock(wifiMode, "HotspotHighPerfWifiLock")?.apply {
                 setReferenceCounted(true)
                 acquire()
             }
@@ -99,11 +84,11 @@ class MainActivity : FlutterActivity() {
                     "setKeepScreenOn" -> {
                         try {
                             val keepOn = call.argument<Boolean>("keepOn") ?: false
-                            activity?.runOnUiThread {
+                            runOnUiThread {
                                 if (keepOn) {
-                                    activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                                 } else {
-                                    activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                                 }
                             }
                             result.success(true)
@@ -206,31 +191,29 @@ class MainActivity : FlutterActivity() {
         }
 
         MediaProjectionService.onStopListener = {
-            activity?.runOnUiThread {
+            runOnUiThread {
                 methodChannel?.invokeMethod("onScreenShareStopped", null)
             }
         }
     }
 
-    private var networkCallback: android.net.ConnectivityManager.NetworkCallback? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     private fun bindProcessToWifiNetwork() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
-                val connectivityManager = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
+                val connectivityManager = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
 
-                // 1. Unregister previous callback if any
                 networkCallback?.let {
                     try { connectivityManager.unregisterNetworkCallback(it) } catch (_: Exception) {}
                 }
 
-                // 2. Build request for all Wi-Fi networks even without internet uplink
                 val request = android.net.NetworkRequest.Builder()
                     .addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI)
                     .removeCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
                     .build()
 
-                networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+                networkCallback = object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: android.net.Network) {
                         try {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -252,26 +235,29 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
-                connectivityManager.registerNetworkCallback(request, networkCallback!!)
-
-                // 3. Immediately inspect all current networks
-                var bound = false
-                val networks = connectivityManager.allNetworks
-                for (network in networks) {
-                    val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
-                    if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)) {
-                        connectivityManager.bindProcessToNetwork(network)
-                        bound = true
-                        break
-                    }
-                }
-                if (!bound) {
-                    connectivityManager.bindProcessToNetwork(null)
-                }
+                connectivityManager.requestNetwork(request, networkCallback!!)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (resultCode == android.app.Activity.RESULT_OK && data != null) {
+            try {
+                val serviceIntent = Intent(this, MediaProjectionService::class.java).apply {
+                    action = MediaProjectionService.ACTION_START
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Failed to start MediaProjectionService in onActivityResult: ${e.message}")
+            }
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onDestroy() {
@@ -279,7 +265,7 @@ class MainActivity : FlutterActivity() {
         MediaProjectionService.onStopListener = null
         try {
             networkCallback?.let {
-                val connectivityManager = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+                val connectivityManager = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
                 connectivityManager?.unregisterNetworkCallback(it)
             }
         } catch (_: Exception) {}
@@ -299,325 +285,3 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 }
-
-class MediaProjectionService : Service() {
-    companion object {
-        const val CHANNEL_ID = "hotspot_media_projection_channel"
-        const val NOTIFICATION_ID = 9001
-        const val ACTION_START = "ACTION_START"
-        const val ACTION_STOP = "ACTION_STOP"
-        var onStopListener: (() -> Unit)? = null
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onCreate() {
-        super.onCreate()
-        createNotificationChannel()
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> {
-                val stopIntent = Intent(this, MediaProjectionService::class.java).apply {
-                    action = ACTION_STOP
-                }
-                val stopPendingIntent = PendingIntent.getService(
-                    this,
-                    0,
-                    stopIntent,
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    } else {
-                        PendingIntent.FLAG_UPDATE_CURRENT
-                    }
-                )
-
-                val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                    .setContentTitle("Screen Mirroring Active")
-                    .setContentText("Casting screen over Hotspot P2P")
-                    .setSmallIcon(android.R.drawable.ic_menu_camera)
-                    .setPriority(NotificationCompat.PRIORITY_LOW)
-                    .setOngoing(true)
-                    .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Casting", stopPendingIntent)
-                    .build()
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-                    } else {
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-                    }
-                    startForeground(NOTIFICATION_ID, notification, fgsType)
-                } else {
-                    startForeground(NOTIFICATION_ID, notification)
-                }
-            }
-            ACTION_STOP -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                } else {
-                    @Suppress("DEPRECATION")
-                    stopForeground(true)
-                }
-                onStopListener?.invoke()
-                stopSelf()
-            }
-        }
-        return START_NOT_STICKY
-    }
-
-    override fun onDestroy() {
-        onStopListener?.invoke()
-        super.onDestroy()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Screen Mirroring Service",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Foreground service notification for active screen mirroring"
-            }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
-    }
-}
-
-/**
- * Ultra-high-performance native Android UDP relay.
- *
- * Runs on a dedicated OS thread with real-time priority (THREAD_PRIORITY_URGENT_AUDIO)
- * and a 2 MB kernel socket buffer. Bypasses the Dart VM and Flutter UI event loop entirely,
- * guaranteeing zero frame drops and minimal latency when Hotspot SoftAP is hosted on Android.
- */
-object NativeUdpRelay {
-    private const val TAG = "NativeUdpRelay"
-    private var socket: DatagramSocket? = null
-    private var relayThread: Thread? = null
-    @Volatile
-    private var isRunning = false
-    private var publicPort = 0
-    private var targetLoopbackPort = 0
-    private var remotePeerAddress: InetAddress? = null
-    private var remotePeerPort = 0
-
-    @Synchronized
-    fun start(targetPort: Int, peerIp: String?): Int {
-        stop()
-        targetLoopbackPort = targetPort
-        if (!peerIp.isNullOrBlank()) {
-            try {
-                remotePeerAddress = InetAddress.getByName(peerIp)
-            } catch (e: Exception) {
-                android.util.Log.w(TAG, "Could not resolve initial peerIp: $peerIp", e)
-            }
-        }
-
-        val s = DatagramSocket(null).apply {
-            reuseAddress = true
-            // Request 2 MB socket buffers to absorb large 60 FPS keyframe bursts
-            try {
-                receiveBufferSize = 2 * 1024 * 1024
-                sendBufferSize = 2 * 1024 * 1024
-            } catch (e: Exception) {
-                android.util.Log.w(TAG, "Socket buffer size request capped by kernel: ${e.message}")
-            }
-            bind(InetSocketAddress(InetAddress.getByName("0.0.0.0"), 0))
-        }
-
-        socket = s
-        publicPort = s.localPort
-        isRunning = true
-
-        val loopback = InetAddress.getByName("127.0.0.1")
-
-        relayThread = Thread({
-            try {
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
-            } catch (_: Exception) {
-                try {
-                    Thread.currentThread().priority = Thread.MAX_PRIORITY
-                } catch (_: Exception) {}
-            }
-
-            val buffer = ByteArray(65535)
-            val packet = DatagramPacket(buffer, buffer.size)
-
-            android.util.Log.i(TAG, "Native UDP relay thread running on core priority nice=-19")
-
-            while (isRunning && !s.isClosed) {
-                try {
-                    packet.length = buffer.size
-                    s.receive(packet)
-
-                    val senderAddr = packet.address
-                    val isLoopback = senderAddr.isLoopbackAddress ||
-                            senderAddr.hostAddress == "127.0.0.1" ||
-                            senderAddr.hostAddress == "::1"
-
-                    if (isLoopback) {
-                        // RTCP feedback from local WebRTC loopback -> forward to remote peer
-                        val targetAddr = remotePeerAddress
-                        val targetP = remotePeerPort
-                        if (targetAddr != null && targetP > 0) {
-                            val fwd = DatagramPacket(packet.data, packet.offset, packet.length, targetAddr, targetP)
-                            s.send(fwd)
-                        }
-                    } else {
-                        // RTP video data from remote peer -> forward to local WebRTC loopback
-                        remotePeerAddress = senderAddr
-                        remotePeerPort = packet.port
-                        val fwd = DatagramPacket(packet.data, packet.offset, packet.length, loopback, targetLoopbackPort)
-                        s.send(fwd)
-                    }
-                } catch (e: Exception) {
-                    if (!isRunning || s.isClosed) break
-                }
-            }
-            android.util.Log.i(TAG, "Native UDP relay thread exited cleanly")
-        }, "NativeUdpRelayThread").apply {
-            isDaemon = true
-            start()
-        }
-
-        android.util.Log.i(TAG, "Started native relay 0.0.0.0:$publicPort <-> 127.0.0.1:$targetLoopbackPort (SO_RCVBUF: ${s.receiveBufferSize} bytes)")
-        return publicPort
-    }
-
-    @Synchronized
-    fun stop() {
-        isRunning = false
-        try {
-            socket?.close()
-        } catch (_: Exception) {}
-        socket = null
-        relayThread?.interrupt()
-        relayThread = null
-        remotePeerAddress = null
-        remotePeerPort = 0
-        publicPort = 0
-    }
-}
-
-object AudioVadEngine {
-    private const val TAG = "AudioVadEngine"
-    private const val SAMPLE_RATE = 16000
-    private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
-    private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
-    private const val HANGOVER_MS = 750L // Keep speaking state active during natural pauses between words
-
-    @Volatile
-    var thresholdDb: Double = -50.0 // Studio room speech sensitivity
-
-    private val mainHandler = Handler(Looper.getMainLooper())
-
-    @Volatile
-    private var isRunning = false
-    private var recordingThread: Thread? = null
-    private var audioRecord: AudioRecord? = null
-    private var eventSink: EventChannel.EventSink? = null
-
-    @Synchronized
-    fun start(context: Context, sink: EventChannel.EventSink?) {
-        stop()
-        eventSink = sink
-
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            android.util.Log.w(TAG, "Audio recording permission not granted")
-            return
-        }
-
-        val minBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
-        val bufferSize = Math.max(minBufSize, 2048)
-
-        try {
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                SAMPLE_RATE,
-                CHANNEL_CONFIG,
-                AUDIO_FORMAT,
-                bufferSize
-            )
-
-            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                android.util.Log.e(TAG, "AudioRecord initialization failed")
-                audioRecord?.release()
-                audioRecord = null
-                return
-            }
-
-            audioRecord?.startRecording()
-            isRunning = true
-
-            recordingThread = Thread({
-                val audioBuffer = ShortArray(1024)
-                var lastSpokenTime = 0L
-                var lastReportTime = 0L
-
-                while (isRunning) {
-                    val record = audioRecord ?: break
-                    val readCount = record.read(audioBuffer, 0, audioBuffer.size)
-                    if (readCount > 0) {
-                        var sum = 0.0
-                        for (i in 0 until readCount) {
-                            val sample = audioBuffer[i].toDouble()
-                            sum += sample * sample
-                        }
-                        val rms = Math.sqrt(sum / readCount)
-                        val db = if (rms > 0.0) 20.0 * Math.log10(rms / 32767.0) else -100.0
-                        val audioLevel = (rms / 32767.0).coerceIn(0.0, 1.0)
-                        val now = System.currentTimeMillis()
-
-                        val isSignalAboveThreshold = db >= thresholdDb
-                        if (isSignalAboveThreshold) {
-                            lastSpokenTime = now
-                        }
-
-                        val isSpeaking = (now - lastSpokenTime) < HANGOVER_MS
-
-                        // Report ~25 times per second (every 40ms)
-                        if (now - lastReportTime >= 40) {
-                            lastReportTime = now
-                            val payload = mapOf(
-                                "isSpeaking" to isSpeaking,
-                                "decibels" to db,
-                                "audioLevel" to audioLevel
-                            )
-                            mainHandler.post {
-                                try {
-                                    eventSink?.success(payload)
-                                } catch (_: Exception) {}
-                            }
-                        }
-                    }
-                }
-            }, "AudioVadThread").apply {
-                priority = Thread.NORM_PRIORITY
-                isDaemon = true
-                start()
-            }
-            android.util.Log.i(TAG, "AudioVadEngine started successfully at 16kHz")
-        } catch (e: Exception) {
-            android.util.Log.e(TAG, "Failed to start AudioVadEngine: ${e.localizedMessage}")
-            stop()
-        }
-    }
-
-    @Synchronized
-    fun stop() {
-        isRunning = false
-        try {
-            audioRecord?.stop()
-            audioRecord?.release()
-        } catch (_: Exception) {}
-        audioRecord = null
-        recordingThread?.interrupt()
-        recordingThread = null
-        eventSink = null
-    }
-}
-

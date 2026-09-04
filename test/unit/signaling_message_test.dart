@@ -89,9 +89,14 @@ void main() {
         text: 'Welcome back to our tech review channel!',
         title: 'Tech Review Script',
       );
-      final decodedScript = SignalingMessage.deserialize(scriptUpdate.serialize());
+      final decodedScript = SignalingMessage.deserialize(
+        scriptUpdate.serialize(),
+      );
       expect(decodedScript?.type, 'prompter_script_update');
-      expect(decodedScript?.payload?['text'], 'Welcome back to our tech review channel!');
+      expect(
+        decodedScript?.payload?['text'],
+        'Welcome back to our tech review channel!',
+      );
       expect(decodedScript?.payload?['title'], 'Tech Review Script');
 
       // Prompter state sync
@@ -143,23 +148,98 @@ void main() {
 
       // Filtering out cellular interface candidate strings
       const cellularCand = 'candidate:1 1 UDP 2122260223 rmnet0 50000 typ host';
-      expect(SdpCandidateSanitizer.sanitizeCandidate(cellularCand, '192.168.43.1'), isNull);
+      expect(
+        SdpCandidateSanitizer.sanitizeCandidate(cellularCand, '192.168.43.1'),
+        isNull,
+      );
 
       // Remapping loopback candidates to active private LAN IP
-      const loopbackCand = 'candidate:2 1 UDP 2122260223 127.0.0.1 50000 typ host';
-      final sanitizedLoopback = SdpCandidateSanitizer.sanitizeCandidate(loopbackCand, '192.168.43.1');
+      const loopbackCand =
+          'candidate:2 1 UDP 2122260223 127.0.0.1 50000 typ host';
+      final sanitizedLoopback = SdpCandidateSanitizer.sanitizeCandidate(
+        loopbackCand,
+        '192.168.43.1',
+      );
       expect(sanitizedLoopback, contains('192.168.43.1'));
       expect(sanitizedLoopback, contains('50000'));
 
       // Keeping valid LAN host candidate
-      const validLanCand = 'candidate:3 1 UDP 2122260223 192.168.43.1 50000 typ host';
-      expect(SdpCandidateSanitizer.sanitizeCandidate(validLanCand, '192.168.43.1'), equals(validLanCand));
+      const validLanCand =
+          'candidate:3 1 UDP 2122260223 192.168.43.1 50000 typ host';
+      expect(
+        SdpCandidateSanitizer.sanitizeCandidate(validLanCand, '192.168.43.1'),
+        equals(validLanCand),
+      );
     });
 
     test('Verify zero-STUN ICE configuration', () {
       final iceServers = WebRTCConstants.rtcConfiguration['iceServers'] as List;
       expect(iceServers, isEmpty);
       expect(WebRTCConstants.rtcConfiguration['sdpSemantics'], 'unified-plan');
+    });
+
+    test('Token-based candidate sanitizer preserves priority and foundation numbers', () {
+      // Candidate with priority that has digits matching IP octets
+      const candidateStr =
+          'candidate:192 1 UDP 19216811 127.0.0.1 54321 typ host generation 0';
+      final sanitized = SdpCandidateSanitizer.sanitizeCandidate(
+        candidateStr,
+        '192.168.43.5',
+      );
+      expect(sanitized, isNotNull);
+      final tokens = sanitized!.split(' ');
+      expect(tokens[0], 'candidate:192'); // foundation preserved
+      expect(tokens[3], '19216811'); // priority preserved
+      expect(tokens[4], '192.168.43.5'); // connection address remapped
+      expect(tokens[5], '54321'); // port preserved
+    });
+
+    test(
+      'Dynamic SDP payload detection and prioritization for VP8 and H264',
+      () {
+        const dynamicSdp =
+            'v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 98 102\r\n'
+            'a=rtpmap:98 VP8/90000\r\n'
+            'a=rtpmap:102 H264/90000\r\n';
+
+        // When VP8 chosen, 98 should be prioritized
+        final sanitizedVp8 = SdpCandidateSanitizer.sanitizeSdp(
+          dynamicSdp,
+          '192.168.43.1',
+          bitrateKbps: 3000,
+          codecEngine: CodecEngine.vp8,
+        );
+        expect(sanitizedVp8, contains('m=video 9 UDP/TLS/RTP/SAVPF 98 102'));
+        expect(sanitizedVp8, contains('a=fmtp:98'));
+        expect(sanitizedVp8, contains('a=rtcp-fb:98 nack pli'));
+
+        // When H264 chosen, 102 should be prioritized first
+        final sanitizedH264 = SdpCandidateSanitizer.sanitizeSdp(
+          dynamicSdp,
+          '192.168.43.1',
+          bitrateKbps: 3000,
+          codecEngine: CodecEngine.h264,
+        );
+        expect(sanitizedH264, contains('m=video 9 UDP/TLS/RTP/SAVPF 102 98'));
+        expect(sanitizedH264, contains('a=fmtp:102'));
+        expect(sanitizedH264, contains('a=rtcp-fb:102 nack pli'));
+      },
+    );
+
+    test('SignalingMessage handles malformed JSON without crashing', () {
+      // Non-map payload and candidate
+      final malformed = SignalingMessage.fromJson({
+        'type': 'test',
+        'payload': 'not-a-map',
+        'candidate': 12345,
+      });
+      expect(malformed.type, 'test');
+      expect(malformed.payload, isNull);
+      expect(malformed.candidate, isNull);
+
+      // Deserialization of invalid string
+      expect(SignalingMessage.deserialize('not a json'), isNull);
+      expect(SignalingMessage.deserialize('[]'), isNull);
     });
   });
 }

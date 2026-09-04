@@ -4,13 +4,20 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/models/prompter_model.dart';
+import '../../../../core/services/audio_vad_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/neumorphic_widgets.dart';
 import '../../bloc/sender_bloc.dart';
 import '../../bloc/sender_event.dart';
+import 'prompter_countdown_overlay.dart';
+import 'prompter_eye_line_marker.dart';
+import 'prompter_hud_bar.dart';
 
+/// Studio teleprompter view displayed on the talent phone display.
+/// Integrates voice-activity auto-scrolling, speed tuning, optical mirror mode, and lens eye-line guide.
 class TalentPrompterView extends StatefulWidget {
   final PrompterConfig config;
   final VoidCallback onToggleHud;
@@ -33,22 +40,79 @@ class _TalentPrompterViewState extends State<TalentPrompterView>
   int _countdown = 0;
   Timer? _countdownTimer;
   Duration _lastElapsed = Duration.zero;
+  int _lastProgressUpdateMs = 0;
+
+  AudioVadService? _vadService;
+  StreamSubscription<VadEvent>? _vadSubscription;
+  bool _isSpeaking = true;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-
     _ticker = createTicker(_onTick);
+
+    if (widget.config.isVoiceActivated) {
+      _startVad();
+    }
 
     if (widget.config.isPlaying) {
       _ticker.start();
     }
   }
 
+  Future<void> _startVad() async {
+    try {
+      final status = await Permission.microphone.status;
+      if (!status.isGranted) {
+        final requested = await Permission.microphone.request();
+        if (!requested.isGranted) {
+          debugPrint(
+              '[TalentPrompterView] Microphone permission denied for VAD.');
+          return;
+        }
+      }
+
+      _vadService ??= AudioVadService();
+      await _vadService!.stop();
+      await _vadService!.setThreshold(-50.0);
+      await _vadService!.start();
+      await _vadSubscription?.cancel();
+      _vadSubscription = _vadService!.vadStream.listen((event) {
+        if (mounted) {
+          setState(() {
+            _isSpeaking = event.isSpeaking;
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint(
+          '[TalentPrompterView] Failed to start VAD on talent device: $e');
+    }
+  }
+
+  Future<void> _stopVad() async {
+    await _vadSubscription?.cancel();
+    _vadSubscription = null;
+    await _vadService?.stop();
+    if (mounted) {
+      setState(() {
+        _isSpeaking = true;
+      });
+    }
+  }
+
   @override
   void didUpdateWidget(covariant TalentPrompterView oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (widget.config.isVoiceActivated != oldWidget.config.isVoiceActivated) {
+      if (widget.config.isVoiceActivated) {
+        _startVad();
+      } else {
+        _stopVad();
+      }
+    }
 
     if (widget.config.isPlaying != oldWidget.config.isPlaying) {
       if (widget.config.isPlaying) {
@@ -82,7 +146,7 @@ class _TalentPrompterViewState extends State<TalentPrompterView>
         timer.cancel();
         setState(() => _countdown = 0);
         _lastElapsed = Duration.zero;
-        if (!_ticker.isActive && widget.config.isPlaying) {
+        if (!_ticker.isActive) {
           _ticker.start();
         }
       }
@@ -90,37 +154,50 @@ class _TalentPrompterViewState extends State<TalentPrompterView>
   }
 
   void _onTick(Duration elapsed) {
-    if (!_scrollController.hasClients) return;
-
-    if (_lastElapsed == Duration.zero) {
+    if (!mounted ||
+        !_scrollController.hasClients ||
+        !widget.config.isPlaying ||
+        _countdown > 0) {
       _lastElapsed = elapsed;
       return;
     }
 
-    final deltaSeconds =
-        (elapsed.inMicroseconds - _lastElapsed.inMicroseconds) / 1000000.0;
+    if (widget.config.isVoiceActivated && !_isSpeaking) {
+      _lastElapsed = elapsed;
+      return;
+    }
+
+    final deltaSeconds = _lastElapsed == Duration.zero
+        ? 0.016
+        : (elapsed - _lastElapsed).inMicroseconds / 1000000.0;
     _lastElapsed = elapsed;
 
-    final pxPerSec = widget.config.pixelsPerSecond;
-    final deltaPixels = pxPerSec * deltaSeconds;
+    if (deltaSeconds <= 0 || deltaSeconds > 0.1) return;
 
+    final pixelsPerSecond = widget.config.pixelsPerSecond;
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.offset;
-    final nextScroll = (currentScroll + deltaPixels).clamp(0.0, maxScroll);
 
-    if (nextScroll != currentScroll) {
-      _scrollController.jumpTo(nextScroll);
-      if (maxScroll > 0) {
-        final progress = (nextScroll / maxScroll).clamp(0.0, 1.0);
-        context
-            .read<SenderBloc>()
-            .add(SenderPrompterProgressUpdated(progress));
-      }
-    } else if (currentScroll >= maxScroll && maxScroll > 0) {
-      // Reached the end of script
+    if (currentScroll >= maxScroll && maxScroll > 0) {
+      _ticker.stop();
       context
           .read<SenderBloc>()
           .add(const SenderPrompterPlayPauseToggled());
+      return;
+    }
+
+    final newOffset =
+        (currentScroll + (pixelsPerSecond * deltaSeconds)).clamp(0.0, maxScroll);
+    _scrollController.jumpTo(newOffset);
+
+    // Throttle remote BLoC progress events (<= 4 updates per second)
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastProgressUpdateMs > 250 && maxScroll > 0) {
+      _lastProgressUpdateMs = nowMs;
+      final progress = newOffset / maxScroll;
+      context
+          .read<SenderBloc>()
+          .add(SenderPrompterProgressUpdated(progress));
     }
   }
 
@@ -129,6 +206,8 @@ class _TalentPrompterViewState extends State<TalentPrompterView>
     _countdownTimer?.cancel();
     _ticker.dispose();
     _scrollController.dispose();
+    _stopVad();
+    _vadService?.dispose();
     super.dispose();
   }
 
@@ -144,15 +223,15 @@ class _TalentPrompterViewState extends State<TalentPrompterView>
             child: _buildTextScroller(),
           ),
 
-          // 2. Eye-Line Marker Guide (aligned at top 28% near camera sensor)
+          // 2. Eye-Line Marker Guide
           Positioned(
             top: MediaQuery.of(context).size.height * 0.28,
             left: 0,
             right: 0,
-            child: _buildEyeLineMarker(),
+            child: const PrompterEyeLineMarker(),
           ),
 
-          // 3. Top HUD: VAD Voice Status Pill & Mode Toggle
+          // 3. Top HUD: Status Pill & View Switcher
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             left: 16,
@@ -163,7 +242,7 @@ class _TalentPrompterViewState extends State<TalentPrompterView>
           // 4. Countdown 3-2-1 Overlay
           if (_countdown > 0)
             Positioned.fill(
-              child: _buildCountdownOverlay(),
+              child: PrompterCountdownOverlay(countdown: _countdown),
             ),
 
           // 5. Bottom Floating Control Bar
@@ -171,13 +250,21 @@ class _TalentPrompterViewState extends State<TalentPrompterView>
             bottom: MediaQuery.of(context).padding.bottom + 12,
             left: 16,
             right: 16,
-            child: _buildBottomControlBar(),
+            child: PrompterHudBar(
+              config: widget.config,
+              onRewind: () {
+                _scrollController.jumpTo(0.0);
+                context
+                    .read<SenderBloc>()
+                    .add(const SenderPrompterRewindRequested());
+              },
+            ),
           ),
         ],
       ),
     );
 
-    // Apply horizontal flip for beam-splitter prompter glass if enabled
+    // Apply horizontal flip for beam-splitter glass if enabled
     if (widget.config.isMirrored) {
       return Transform(
         alignment: Alignment.center,
@@ -265,55 +352,8 @@ class _TalentPrompterViewState extends State<TalentPrompterView>
     );
   }
 
-  Widget _buildEyeLineMarker() {
-    return IgnorePointer(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFB300).withValues(alpha: 0.12),
-          border: Border(
-            top: BorderSide(
-              color: const Color(0xFFFFB300).withValues(alpha: 0.6),
-              width: 1.5,
-            ),
-            bottom: BorderSide(
-              color: const Color(0xFFFFB300).withValues(alpha: 0.6),
-              width: 1.5,
-            ),
-          ),
-        ),
-        child: const Row(
-          children: [
-            Icon(
-              Icons.arrow_right_rounded,
-              color: Color(0xFFFFB300),
-              size: 22,
-            ),
-            SizedBox(width: 4),
-            Text(
-              'EYE LINE — KEEP GAZE HERE FOR LENS CONTACT',
-              style: TextStyle(
-                color: Color(0xFFFFB300),
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-              ),
-            ),
-            Spacer(),
-            Icon(
-              Icons.arrow_left_rounded,
-              color: Color(0xFFFFB300),
-              size: 22,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildTextScroller() {
     final screenHeight = MediaQuery.of(context).size.height;
-    // Buffer top padding so first line starts right at the eye-line guide
     final topPadding = screenHeight * 0.28;
 
     return SingleChildScrollView(
@@ -328,294 +368,12 @@ class _TalentPrompterViewState extends State<TalentPrompterView>
       child: Text(
         widget.config.scriptText,
         style: TextStyle(
-          color: const Color(0xFFF0F6FC), // High contrast crisp prompter white
+          color: const Color(0xFFF0F6FC),
           fontSize: widget.config.fontSize,
           fontWeight: FontWeight.w700,
           height: 1.55,
           letterSpacing: 0.2,
         ),
-      ),
-    );
-  }
-
-  Widget _buildCountdownOverlay() {
-    return Container(
-      color: Colors.black.withValues(alpha: 0.75),
-      child: Center(
-        child: Text(
-          '$_countdown',
-          style: const TextStyle(
-            color: AppTheme.primary,
-            fontSize: 130,
-            fontWeight: FontWeight.w900,
-            shadows: [
-              Shadow(
-                color: AppTheme.primary,
-                blurRadius: 30,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomControlBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161B22).withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white12),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black54,
-            blurRadius: 16,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Speed and Font Size Row
-          Row(
-            children: [
-              // WPM Indicator
-              const Icon(Icons.speed_rounded, color: AppTheme.primary, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                '${widget.config.scrollSpeedWpm.round()} WPM',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-              ),
-              Expanded(
-                child: Slider(
-                  value: widget.config.scrollSpeedWpm,
-                  min: 60.0,
-                  max: 300.0,
-                  divisions: 24,
-                  activeColor: AppTheme.primary,
-                  inactiveColor: Colors.white24,
-                  onChanged: (val) {
-                    context
-                        .read<SenderBloc>()
-                        .add(SenderPrompterSpeedChanged(val));
-                  },
-                ),
-              ),
-
-              // Font Size Controls
-              IconButton(
-                icon: const Icon(Icons.text_decrease_rounded, size: 20),
-                color: Colors.white70,
-                onPressed: () {
-                  final newSize = (widget.config.fontSize - 4).clamp(18.0, 56.0);
-                  context
-                      .read<SenderBloc>()
-                      .add(SenderPrompterFontSizeChanged(newSize));
-                },
-              ),
-              Text(
-                '${widget.config.fontSize.round()}pt',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.text_increase_rounded, size: 20),
-                color: Colors.white70,
-                onPressed: () {
-                  final newSize = (widget.config.fontSize + 4).clamp(18.0, 56.0);
-                  context
-                      .read<SenderBloc>()
-                      .add(SenderPrompterFontSizeChanged(newSize));
-                },
-              ),
-            ],
-          ),
-
-          const Divider(height: 8, color: Colors.white12),
-
-          // Primary Actions Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              // Rewind to top
-              IconButton(
-                icon: const Icon(Icons.replay_rounded, size: 24),
-                color: Colors.white,
-                tooltip: 'Rewind to Top',
-                onPressed: () {
-                  _scrollController.jumpTo(0.0);
-                  context
-                      .read<SenderBloc>()
-                      .add(const SenderPrompterRewindRequested());
-                },
-              ),
-
-              // Horizontal mirror toggle
-              IconButton(
-                icon: Icon(
-                  widget.config.isMirrored
-                      ? Icons.flip_rounded
-                      : Icons.flip_camera_android_rounded,
-                  size: 22,
-                ),
-                color: widget.config.isMirrored
-                    ? AppTheme.accent
-                    : Colors.white70,
-                tooltip: 'Flip for Glass Beam-Splitter',
-                onPressed: () {
-                  context
-                      .read<SenderBloc>()
-                      .add(const SenderPrompterMirrorToggled());
-                },
-              ),
-
-              // Big Play/Pause Button
-              GestureDetector(
-                onTap: () {
-                  context
-                      .read<SenderBloc>()
-                      .add(const SenderPrompterPlayPauseToggled());
-                },
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: widget.config.isPlaying
-                        ? AppTheme.warning
-                        : AppTheme.primary,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: (widget.config.isPlaying
-                                ? AppTheme.warning
-                                : AppTheme.primary)
-                            .withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    widget.config.isPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-              ),
-
-              // Voice-Activated Auto-Scroll Toggle
-              IconButton(
-                icon: Icon(
-                  widget.config.isVoiceActivated
-                      ? Icons.record_voice_over_rounded
-                      : Icons.voice_over_off_rounded,
-                  size: 24,
-                ),
-                color: widget.config.isVoiceActivated
-                    ? AppTheme.success
-                    : Colors.white70,
-                tooltip: 'Voice-Activated Auto-Scroll',
-                onPressed: () {
-                  context
-                      .read<SenderBloc>()
-                      .add(const SenderPrompterVoiceActivationToggled());
-                },
-              ),
-
-              // Quick Script Edit Dialog
-              IconButton(
-                icon: const Icon(Icons.edit_note_rounded, size: 26),
-                color: Colors.white70,
-                tooltip: 'Edit Script',
-                onPressed: () => _showEditScriptDialog(context),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditScriptDialog(BuildContext context) {
-    final textController =
-        TextEditingController(text: widget.config.scriptText);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.edit_note_rounded, color: AppTheme.primary),
-            SizedBox(width: 8),
-            Text(
-              'Edit Talent Script',
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
-              ),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: 500,
-          child: TextField(
-            controller: textController,
-            maxLines: 12,
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 14,
-              height: 1.4,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Enter teleprompter script...',
-              filled: true,
-              fillColor: AppTheme.surfaceElevated,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () {
-              final newText = textController.text.trim();
-              if (newText.isNotEmpty) {
-                context
-                    .read<SenderBloc>()
-                    .add(SenderPrompterScriptUpdated(newText));
-              }
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('Save & Sync'),
-          ),
-        ],
       ),
     );
   }

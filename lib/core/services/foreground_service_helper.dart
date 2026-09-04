@@ -22,7 +22,9 @@ class ForegroundServiceHelper {
     _handlerInitialized = true;
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onScreenShareStopped') {
-        debugPrint('[ForegroundServiceHelper] Received onScreenShareStopped from Android native');
+        debugPrint(
+          '[ForegroundServiceHelper] Received onScreenShareStopped from Android native',
+        );
         _stopEventController.add(null);
       }
     });
@@ -110,10 +112,14 @@ class ForegroundServiceHelper {
         'targetLoopbackPort': targetLoopbackPort,
         'remotePeerIp': remotePeerIp,
       });
-      debugPrint('[ForegroundServiceHelper] startNativeUdpRelay returned: $port');
+      debugPrint(
+        '[ForegroundServiceHelper] startNativeUdpRelay returned: $port',
+      );
       return port;
     } catch (e) {
-      debugPrint('[ForegroundServiceHelper] Error starting native UDP relay: $e');
+      debugPrint(
+        '[ForegroundServiceHelper] Error starting native UDP relay: $e',
+      );
       return null;
     }
   }
@@ -124,10 +130,14 @@ class ForegroundServiceHelper {
 
     try {
       final result = await _channel.invokeMethod<bool>('stopNativeUdpRelay');
-      debugPrint('[ForegroundServiceHelper] stopNativeUdpRelay returned: $result');
+      debugPrint(
+        '[ForegroundServiceHelper] stopNativeUdpRelay returned: $result',
+      );
       return result ?? false;
     } catch (e) {
-      debugPrint('[ForegroundServiceHelper] Error stopping native UDP relay: $e');
+      debugPrint(
+        '[ForegroundServiceHelper] Error stopping native UDP relay: $e',
+      );
       return false;
     }
   }
@@ -137,14 +147,22 @@ class ForegroundServiceHelper {
     if (!Platform.isAndroid) return null;
 
     try {
-      final res = await _channel.invokeMapMethod<String, dynamic>('getDeviceThermalInfo');
+      final res = await _channel.invokeMapMethod<String, dynamic>(
+        'getDeviceThermalInfo',
+      );
       if (res == null) return null;
       final temp = (res['temperatureC'] as num?)?.toDouble();
       final status = res['thermalStatus'] as String? ?? 'NORMAL';
       final name = res['deviceName'] as String? ?? 'Device';
-      return DeviceThermalInfo(temperatureC: temp, thermalStatus: status, deviceName: name);
+      return DeviceThermalInfo(
+        temperatureC: temp,
+        thermalStatus: status,
+        deviceName: name,
+      );
     } catch (e) {
-      debugPrint('[ForegroundServiceHelper] Error getting device thermal info: $e');
+      debugPrint(
+        '[ForegroundServiceHelper] Error getting device thermal info: $e',
+      );
       return null;
     }
   }
@@ -173,4 +191,3 @@ class DeviceThermalInfo {
     this.deviceName = 'Device',
   });
 }
-

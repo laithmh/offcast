@@ -1,17 +1,16 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../core/constants/webrtc_constants.dart';
 import '../../../core/models/signaling_message.dart';
 import '../../../core/network/discovery_beacon.dart';
 import '../../../core/network/local_udp_relay.dart';
 import '../../../core/services/foreground_service_helper.dart';
+import '../../../core/utils/webrtc_stats_calculator.dart';
+import 'sender_signaling_client.dart';
 
 enum SenderConnectionState {
   disconnected,
@@ -23,11 +22,13 @@ enum SenderConnectionState {
   failed,
 }
 
+/// Orchestrates Sender media capture (camera / screen), WebRTC PeerConnection,
+/// in-place camera lens switching, and telemetry statistics.
 class SenderWebRTCService {
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
-  WebSocketChannel? _channel;
-  StreamSubscription? _channelSubscription;
+  final SenderSignalingClient _signalingClient = SenderSignalingClient();
+  final WebRtcStatsCalculator _statsCalculator = WebRtcStatsCalculator();
   final LocalUdpRelay _udpRelay = LocalUdpRelay();
 
   final StreamController<SenderConnectionState> _stateController =
@@ -48,14 +49,15 @@ class SenderWebRTCService {
   final List<RTCIceCandidate> _iceCandidateQueue = [];
   bool _hasRemoteDescription = false;
   String? _currentTargetHost;
-  StreamingQualityPreset _currentPreset = StreamingQualityPreset.performance540p60;
+  StreamingQualityPreset _currentPreset =
+      StreamingQualityPreset.performance540p60;
   CodecEngine _codecEngine = CodecEngine.vp8;
   StreamSourceType _currentStreamSource = StreamSourceType.screen;
   CameraFacingMode _currentCameraFacing = CameraFacingMode.environment;
   Timer? _statsTimer;
-  int _lastBytesSent = 0;
-  int _lastFramesEncoded = 0;
-  DateTime? _lastStatsTime;
+  StreamSubscription<SignalingMessage>? _signalingSub;
+  StreamSubscription<void>? _disconnectSub;
+  StreamSubscription<String>? _signalingErrorSub;
 
   StreamSourceType get currentStreamSource => _currentStreamSource;
   CameraFacingMode get currentCameraFacing => _currentCameraFacing;
@@ -78,25 +80,67 @@ class SenderWebRTCService {
     _hasRemoteDescription = false;
 
     try {
-      // 1. Start Native Android Foreground Service for persistent projection
-      _stateController.add(SenderConnectionState.capturingScreen);
-      await ForegroundServiceHelper.startService();
-
-      // 2. Keep screen on
+      // 1. Keep screen on
       await ForegroundServiceHelper.setKeepScreenOn(true);
 
-      // 3. Acquire Media (Direct Studio Camera or Display Media)
+      // 2. Acquire Media with 3-tier camera fallback
       if (streamSource == StreamSourceType.studioCamera) {
-        _localStream = await navigator.mediaDevices.getUserMedia(
-          WebRTCConstants.getCameraMediaConstraints(
-            preset: preset,
-            facing: cameraFacing,
-          ),
-        );
+        try {
+          _localStream = await navigator.mediaDevices.getUserMedia(
+            WebRTCConstants.getCameraMediaConstraints(
+              preset: preset,
+              facing: cameraFacing,
+            ),
+          );
+        } catch (camErr) {
+          debugPrint(
+            '[SenderWebRTC] Primary camera constraints failed ($camErr). Retrying with safe 720p fallback...',
+          );
+          try {
+            _localStream = await navigator.mediaDevices.getUserMedia({
+              'audio': false,
+              'video': {
+                'facingMode':
+                    cameraFacing == CameraFacingMode.user ? 'user' : 'environment',
+                'mandatory': {
+                  'maxWidth': 1280,
+                  'maxHeight': 720,
+                  'maxFrameRate': 30,
+                },
+              },
+            });
+          } catch (fallbackErr) {
+            debugPrint(
+              '[SenderWebRTC] Safe constraints failed ($fallbackErr). Falling back to native basic camera...',
+            );
+            _localStream = await navigator.mediaDevices.getUserMedia({
+              'audio': false,
+              'video': {
+                'facingMode':
+                    cameraFacing == CameraFacingMode.user ? 'user' : 'environment',
+              },
+            });
+          }
+        }
       } else {
-        _localStream = await navigator.mediaDevices.getDisplayMedia(
-          WebRTCConstants.getDisplayMediaConstraints(preset: preset),
-        );
+        _stateController.add(SenderConnectionState.capturingScreen);
+        if (Platform.isAndroid) {
+          final granted = await Helper.requestCapturePermission();
+          if (!granted) {
+            throw Exception('User cancelled screen capture permission.');
+          }
+          await ForegroundServiceHelper.startService();
+        }
+        try {
+          _localStream = await navigator.mediaDevices.getDisplayMedia(
+            WebRTCConstants.getDisplayMediaConstraints(preset: preset),
+          );
+        } catch (e) {
+          if (Platform.isAndroid) {
+            await ForegroundServiceHelper.stopService();
+          }
+          rethrow;
+        }
       }
 
       final videoTracks = _localStream?.getVideoTracks() ?? [];
@@ -108,37 +152,21 @@ class SenderWebRTCService {
         );
       }
 
-      // 4. Bind process to Wi-Fi network interface
+      // 3. Bind process to Wi-Fi network interface
       await ForegroundServiceHelper.bindToWifiNetwork();
 
-      // 5. Connect to Receiver Embedded Signaling Server via WebSocket
+      // 4. Connect to Receiver Signaling Server via WebSocket
       _stateController.add(SenderConnectionState.connectingSignaling);
-      final wsUrl = Uri.parse('ws://$host:$port');
-      debugPrint('[SenderWebRTC] Connecting to signaling server at $wsUrl');
-
-      final ws = await WebSocket.connect(
-        wsUrl.toString(),
-      ).timeout(const Duration(seconds: 5));
-      _channel = IOWebSocketChannel(ws);
+      _setupSignalingSubscriptions();
+      await _signalingClient.connect(host, port);
       _stateController.add(SenderConnectionState.connectedSignaling);
 
-      // 6. Listen for incoming signaling messages
-      _channelSubscription = _channel!.stream.listen(
-        _handleSignalingMessage,
-        onError: (error) {
-          debugPrint('[SenderWebRTC] Signaling channel error: $error');
-          _errorController.add('Signaling connection error: $error');
-          _stateController.add(SenderConnectionState.failed);
-        },
-        onDone: () {
-          debugPrint('[SenderWebRTC] WebSocket disconnected.');
-          if (_peerConnection != null) {
-            _stateController.add(SenderConnectionState.disconnected);
-          }
-        },
+      // Transmit stream source metadata so receiver configures UI
+      _signalingClient.send(
+        SignalingMessage.streamMetadata(streamSource: streamSource),
       );
 
-      // 7. Create WebRTC Peer Connection
+      // 5. Create WebRTC Peer Connection
       _stateController.add(SenderConnectionState.negotiatingWebRTC);
       _peerConnection = await createPeerConnection(
         WebRTCConstants.rtcConfiguration,
@@ -150,16 +178,20 @@ class SenderWebRTCService {
 
       _peerConnection!.onIceConnectionState = (RTCIceConnectionState state) {
         debugPrint('[SenderWebRTC] ICE Connection State: $state');
+        if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+          _errorController.add('WebRTC ICE connection failed. Peer unreachable.');
+          _stateController.add(SenderConnectionState.failed);
+          _stopStatsPolling();
+        }
       };
 
       _peerConnection!.onConnectionState = (RTCPeerConnectionState state) {
-        debugPrint('[SenderWebRTC] PeerConnection Connection State: $state');
+        debugPrint('[SenderWebRTC] PeerConnection State: $state');
         if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
           _stateController.add(SenderConnectionState.streaming);
           _startStatsPolling();
-        } else if (state ==
-                RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-            state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+        } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+            state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
           _stateController.add(SenderConnectionState.failed);
           _stopStatsPolling();
         }
@@ -169,26 +201,26 @@ class SenderWebRTCService {
 
       _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) async {
         if (candidate.candidate != null && candidate.candidate!.isNotEmpty) {
-          debugPrint('[SenderWebRTC] Raw onIceCandidate generated: ${candidate.candidate}');
           final myIp =
               await NetworkHelper.findBestMatchingLocalIp(_currentTargetHost) ??
-                  await NetworkHelper.getMyDeviceIp();
+              await NetworkHelper.getMyDeviceIp();
 
           var candStr = candidate.candidate!;
-          final isPhysical = !candStr.contains('127.0.0.1') &&
+          final isPhysical =
+              !candStr.contains('127.0.0.1') &&
               !candStr.contains('::1') &&
               !candStr.contains('localhost');
 
           if (isPhysical) {
             hasPhysicalCandidate = true;
-            // Physical native candidate available: ensure relay is stopped
             if (_udpRelay.publicPort != null) {
               await _udpRelay.stop();
             }
           }
 
-          // Only use relay if no physical interface exists
-          final loopbackUdpMatch = RegExp(r'candidate:\S+ \d+ udp \d+ 127\.0\.0\.1 (\d+)').firstMatch(candStr);
+          final loopbackUdpMatch = RegExp(
+            r'candidate:\S+ \d+ udp \d+ 127\.0\.0\.1 (\d+)',
+          ).firstMatch(candStr);
           if (loopbackUdpMatch != null && !hasPhysicalCandidate) {
             final loopbackPort = int.tryParse(loopbackUdpMatch.group(1)!);
             if (loopbackPort != null) {
@@ -196,7 +228,10 @@ class SenderWebRTCService {
                 targetLoopbackPort: loopbackPort,
                 remotePeerIp: _currentTargetHost,
               );
-              candStr = candStr.replaceAll('127.0.0.1 $loopbackPort', '$myIp $relayPort');
+              candStr = candStr.replaceAll(
+                '127.0.0.1 $loopbackPort',
+                '$myIp $relayPort',
+              );
             }
           }
 
@@ -205,38 +240,38 @@ class SenderWebRTCService {
             myIp,
           );
           if (fixedCandStr != null) {
-            debugPrint('[SenderWebRTC] Local ICE Candidate generated: $fixedCandStr');
             final fixedCandidate = RTCIceCandidate(
               fixedCandStr,
               candidate.sdpMid,
               candidate.sdpMLineIndex,
             );
-            _sendSignalingMessage(SignalingMessage.candidate(fixedCandidate));
+            _signalingClient.send(
+              SignalingMessage.candidate(fixedCandidate),
+            );
           }
         }
       };
 
-      // 8. Add tracks to Peer Connection
-      for (final track in videoTracks) {
+      // 6. Add local video track to peer connection
+      for (final track in _localStream!.getTracks()) {
         await _peerConnection!.addTrack(track, _localStream!);
       }
 
-      // 9. Register ICE gathering listener before setting local description
+      // 7. Register ICE gathering listener
       final gatheringCompleter = Completer<void>();
       _peerConnection!.onIceGatheringState = (state) {
-        debugPrint('[SenderWebRTC] ICE Gathering State: $state');
         if (state == RTCIceGatheringState.RTCIceGatheringStateComplete) {
           if (!gatheringCompleter.isCompleted) gatheringCompleter.complete();
         }
       };
 
-      // 10. Generate SDP Offer & Set Local Description
+      // 8. Generate SDP Offer & Set Local Description
       final offer = await _peerConnection!.createOffer(
         WebRTCConstants.senderOfferConstraints,
       );
       await _peerConnection!.setLocalDescription(offer);
 
-      // Force high bitrate encodings and maintain framerate on video senders
+      // Configure video encoder parameters
       try {
         final senders = await _peerConnection!.getSenders();
         for (final sender in senders) {
@@ -246,7 +281,8 @@ class SenderWebRTCService {
                 RTCDegradationPreference.BALANCED;
             if (parameters.encodings != null &&
                 parameters.encodings!.isNotEmpty) {
-              final scaleDown = preset == StreamingQualityPreset.performance540p60
+              final scaleDown =
+                  preset == StreamingQualityPreset.performance540p60
                   ? 2.0
                   : (preset == StreamingQualityPreset.ultra1080p30 ? 1.0 : 1.5);
               for (final encoding in parameters.encodings!) {
@@ -261,7 +297,7 @@ class SenderWebRTCService {
         }
       } catch (_) {}
 
-      // Wait for host ICE candidates to be gathered into SDP
+      // Wait for host ICE candidates to gather into SDP
       await Future.any([
         gatheringCompleter.future,
         Future.delayed(const Duration(milliseconds: 1000)),
@@ -270,7 +306,7 @@ class SenderWebRTCService {
       final fullOffer = await _peerConnection!.getLocalDescription();
       final myIp =
           await NetworkHelper.findBestMatchingLocalIp(_currentTargetHost) ??
-              await NetworkHelper.getMyDeviceIp();
+          await NetworkHelper.getMyDeviceIp();
       var sdpStr = SdpCandidateSanitizer.sanitizeSdp(
         fullOffer?.sdp ?? offer.sdp,
         myIp,
@@ -286,7 +322,7 @@ class SenderWebRTCService {
       }
 
       debugPrint('[SenderWebRTC] >>> OUTGOING SDP OFFER:\n$sdpStr');
-      _sendSignalingMessage(SignalingMessage.offer(sdpStr));
+      _signalingClient.send(SignalingMessage.offer(sdpStr));
     } catch (e, stack) {
       debugPrint('[SenderWebRTC] Error starting mirroring: $e\n$stack');
       final errorStr = e.toString();
@@ -294,11 +330,13 @@ class SenderWebRTCService {
         _errorController.add(
           'Target found at $host:$port, but Receiver Mode is not running. Please open Receiver Mode on the display device.',
         );
-      } else if (errorStr.contains('Network is unreachable') || errorStr.contains('101')) {
+      } else if (errorStr.contains('Network is unreachable') ||
+          errorStr.contains('101')) {
         _errorController.add(
           'Wi-Fi disconnected. Please connect this device to the Receiver’s Wi-Fi Hotspot.',
         );
-      } else if (errorStr.contains('No route to host') || errorStr.contains('113')) {
+      } else if (errorStr.contains('No route to host') ||
+          errorStr.contains('113')) {
         _errorController.add(
           'Cannot reach $host:$port. Ensure 4G Mobile Data is turned OFF and both devices are connected to the same Hotspot.',
         );
@@ -310,39 +348,43 @@ class SenderWebRTCService {
         _errorController.add('Failed to start mirroring: $e');
       }
       _stateController.add(SenderConnectionState.failed);
-      await stopMirroring();
+      await stopMirroring(preserveFailedState: true);
     }
   }
 
-  void _sendSignalingMessage(SignalingMessage message) {
-    if (_channel != null) {
-      final encoded = jsonEncode(message.toJson());
-      _channel!.sink.add(encoded);
-    }
+  void _setupSignalingSubscriptions() {
+    _signalingSub?.cancel();
+    _signalingSub = _signalingClient.onMessage.listen(_handleSignalingMessage);
+
+    _disconnectSub?.cancel();
+    _disconnectSub = _signalingClient.onDisconnected.listen((_) {
+      if (_peerConnection != null) {
+        _stateController.add(SenderConnectionState.disconnected);
+      }
+    });
+
+    _signalingErrorSub?.cancel();
+    _signalingErrorSub = _signalingClient.onError.listen((err) {
+      _errorController.add(err);
+      _stateController.add(SenderConnectionState.failed);
+    });
   }
 
-  Future<void> _handleSignalingMessage(dynamic rawMessage) async {
+  Future<void> _handleSignalingMessage(SignalingMessage message) async {
     try {
-      final json = jsonDecode(rawMessage as String) as Map<String, dynamic>;
-      final message = SignalingMessage.fromJson(json);
-
       switch (message.type) {
         case 'answer':
           if (message.sdp != null) {
-            debugPrint(
-              '[SenderWebRTC] Received SDP Answer. Sanitizing & setting remote description...',
-            );
             final answerSdp = SdpCandidateSanitizer.sanitizeSdp(
               message.sdp,
               _currentTargetHost,
               codecEngine: _codecEngine,
             );
-            debugPrint('[SenderWebRTC] <<< INCOMING SDP ANSWER:\n$answerSdp');
             final description = RTCSessionDescription(answerSdp, 'answer');
             await _peerConnection!.setRemoteDescription(description);
             _hasRemoteDescription = true;
 
-            // Apply active encoder bitrate and framerate parameters once negotiation finishes
+            // Apply active encoder bitrate/framerate post-answer
             try {
               final senders = await _peerConnection!.getSenders();
               for (final sender in senders) {
@@ -352,12 +394,13 @@ class SenderWebRTCService {
                       RTCDegradationPreference.BALANCED;
                   if (parameters.encodings != null &&
                       parameters.encodings!.isNotEmpty) {
-                    final scaleDown = _currentPreset ==
+                    final scaleDown =
+                        _currentPreset ==
                             StreamingQualityPreset.performance540p60
                         ? 2.0
                         : (_currentPreset == StreamingQualityPreset.ultra1080p30
-                            ? 1.0
-                            : 1.5);
+                              ? 1.0
+                              : 1.5);
                     for (final encoding in parameters.encodings!) {
                       encoding.maxBitrate = _currentPreset.bitrateKbps * 1000;
                       encoding.minBitrate =
@@ -367,29 +410,18 @@ class SenderWebRTCService {
                     }
                   }
                   await sender.setParameters(parameters);
-                  debugPrint(
-                    '[SenderWebRTC] Successfully configured active encoder: maxBitrate=${_currentPreset.bitrateKbps}kbps, minBitrate=${(_currentPreset.bitrateKbps * 0.70).toInt()}kbps, maxFps=${_currentPreset.targetFps}',
-                  );
                 }
               }
-            } catch (e) {
-              debugPrint('[SenderWebRTC] Note: Could not set post-answer sender parameters: $e');
-            }
+            } catch (_) {}
 
             // Drain queued ICE candidates
             final queued = List<RTCIceCandidate>.from(_iceCandidateQueue);
             _iceCandidateQueue.clear();
             for (final candidate in queued) {
-              debugPrint(
-                '[SenderWebRTC] Adding queued remote ICE candidate: ${candidate.candidate}',
-              );
               try {
                 await _peerConnection!.addCandidate(candidate);
-              } catch (e) {
-                debugPrint('[SenderWebRTC] Error adding remote candidate: $e');
-              }
+              } catch (_) {}
             }
-
             _stateController.add(SenderConnectionState.streaming);
           }
           break;
@@ -402,37 +434,23 @@ class SenderWebRTCService {
               candStr,
               _currentTargetHost,
             );
-
             if (fixedCandStr != null) {
-              final sdpMid = candidateData['sdpMid'] as String? ?? '0';
-              final sdpMLineIndex = candidateData['sdpMLineIndex'] as int? ?? 0;
-              final iceCandidate = RTCIceCandidate(
+              final candidate = RTCIceCandidate(
                 fixedCandStr,
-                sdpMid,
-                sdpMLineIndex,
+                candidateData['sdpMid'] as String?,
+                candidateData['sdpMLineIndex'] as int?,
               );
-
               if (_hasRemoteDescription && _peerConnection != null) {
-                debugPrint(
-                  '[SenderWebRTC] Adding direct remote ICE candidate: $fixedCandStr',
-                );
-                try {
-                  await _peerConnection!.addCandidate(iceCandidate);
-                } catch (e) {
-                  debugPrint('[SenderWebRTC] Error adding direct remote candidate: $e');
-                }
+                await _peerConnection!.addCandidate(candidate);
               } else {
-                debugPrint(
-                  '[SenderWebRTC] Queuing remote ICE candidate: $fixedCandStr',
-                );
-                _iceCandidateQueue.add(iceCandidate);
+                _iceCandidateQueue.add(candidate);
               }
             }
           }
           break;
 
         case 'ping':
-          _sendSignalingMessage(SignalingMessage.pong());
+          _signalingClient.send(SignalingMessage.pong());
           break;
 
         case 'prompter_command':
@@ -441,80 +459,32 @@ class SenderWebRTCService {
           break;
 
         case 'bye':
-          debugPrint('[SenderWebRTC] Received Bye from receiver.');
           await stopMirroring();
           break;
-
-        default:
-          debugPrint('[SenderWebRTC] Unhandled message type: ${message.type}');
       }
     } catch (e, stack) {
-      debugPrint('[SenderWebRTC] Error handling incoming message: $e\n$stack');
+      debugPrint('[SenderWebRTC] Error handling message: $e\n$stack');
     }
   }
 
   void _startStatsPolling() {
     _stopStatsPolling();
-    _lastBytesSent = 0;
-    _lastFramesEncoded = 0;
-    _lastStatsTime = DateTime.now();
+    _statsCalculator.reset();
 
     _statsTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
       if (_peerConnection == null) return;
       try {
         final reports = await _peerConnection!.getStats();
-        double currentFps = 0.0;
-        int rtt = 6;
-        double bitrateMbps = 0.0;
-        final now = DateTime.now();
+        final metrics = _statsCalculator.calculateOutbound(
+          reports,
+          fallbackWidth: _currentPreset.maxWidth,
+          fallbackHeight: _currentPreset.maxHeight,
+        );
 
-        for (final report in reports) {
-          final values = report.values;
-          if (report.type == 'outbound-rtp' && values['kind'] == 'video') {
-            final framesEncoded =
-                int.tryParse(values['framesEncoded']?.toString() ?? '') ?? 0;
-            if (_lastStatsTime != null && _lastFramesEncoded > 0) {
-              final durationSec =
-                  now.difference(_lastStatsTime!).inMilliseconds / 1000.0;
-              if (durationSec > 0 && framesEncoded >= _lastFramesEncoded) {
-                currentFps =
-                    (framesEncoded - _lastFramesEncoded) / durationSec;
-              }
-            } else if (values['framesPerSecond'] != null) {
-              currentFps =
-                  double.tryParse(values['framesPerSecond'].toString()) ?? 0.0;
-            }
-            _lastFramesEncoded = framesEncoded;
-
-            if (values['bytesSent'] != null) {
-              final bytes = int.tryParse(values['bytesSent'].toString()) ?? 0;
-              if (_lastStatsTime != null &&
-                  bytes > _lastBytesSent &&
-                  _lastBytesSent > 0) {
-                final durationSec =
-                    now.difference(_lastStatsTime!).inMilliseconds / 1000.0;
-                if (durationSec > 0) {
-                  bitrateMbps =
-                      ((bytes - _lastBytesSent) * 8) / (durationSec * 1000000);
-                }
-              }
-              _lastBytesSent = bytes;
-            }
-          } else if (report.type == 'candidate-pair' &&
-              values['currentRoundTripTime'] != null) {
-            final rttSec =
-                double.tryParse(values['currentRoundTripTime'].toString()) ??
-                    0.006;
-            rtt = (rttSec * 1000).toInt();
-          }
-        }
-        _lastStatsTime = now;
-
-        // Read device thermal state and transmit telemetry to receiver
         final thermalInfo =
             await ForegroundServiceHelper.getDeviceThermalInfo();
         if (thermalInfo != null) {
-          _sendSignalingMessage(
+          _signalingClient.send(
             SignalingMessage.thermalTelemetry(
               temperatureC: thermalInfo.temperatureC,
               thermalStatus: thermalInfo.thermalStatus,
@@ -525,11 +495,13 @@ class SenderWebRTCService {
 
         _statsController.add(
           StreamPerformanceStats(
-            fps: currentFps,
-            latencyMs: rtt > 0 ? rtt : 6,
-            bitrateMbps: bitrateMbps > 0
-                ? double.parse(bitrateMbps.toStringAsFixed(2))
+            fps: metrics.fps,
+            latencyMs: metrics.latencyMs > 0 ? metrics.latencyMs : 6,
+            bitrateMbps: metrics.bitrateMbps > 0
+                ? double.parse(metrics.bitrateMbps.toStringAsFixed(2))
                 : 3.5,
+            width: metrics.width,
+            height: metrics.height,
             senderTemperatureC: thermalInfo?.temperatureC,
             senderThermalStatus: thermalInfo?.thermalStatus,
             senderDeviceName: thermalInfo?.deviceName,
@@ -544,28 +516,22 @@ class SenderWebRTCService {
     _statsTimer = null;
   }
 
-  Future<void> stopMirroring() async {
-    debugPrint('[SenderWebRTC] Stopping screen mirroring session...');
+  Future<void> stopMirroring({bool preserveFailedState = false}) async {
     _stopStatsPolling();
     await _udpRelay.stop();
 
-    _sendSignalingMessage(SignalingMessage.bye());
+    _signalingClient.send(SignalingMessage.bye());
+    await _signalingClient.disconnect();
 
-    await _channelSubscription?.cancel();
-    _channelSubscription = null;
-
-    try {
-      await _channel?.sink.close();
-    } catch (_) {}
-    _channel = null;
+    _signalingSub?.cancel();
+    _disconnectSub?.cancel();
+    _signalingErrorSub?.cancel();
 
     if (_peerConnection != null) {
       try {
         await _peerConnection!.close();
         await _peerConnection!.dispose();
-      } catch (e) {
-        debugPrint('[SenderWebRTC] Error closing peer connection: $e');
-      }
+      } catch (_) {}
       _peerConnection = null;
     }
 
@@ -575,57 +541,98 @@ class SenderWebRTCService {
           await track.stop();
         }
         await _localStream!.dispose();
-      } catch (e) {
-        debugPrint('[SenderWebRTC] Error stopping local stream: $e');
-      }
+      } catch (_) {}
       _localStream = null;
     }
 
     _iceCandidateQueue.clear();
     _hasRemoteDescription = false;
-    _lastBytesSent = 0;
-    _lastFramesEncoded = 0;
-    _lastStatsTime = null;
 
     if (Platform.isAndroid) {
       await ForegroundServiceHelper.setKeepScreenOn(false);
       await ForegroundServiceHelper.stopService();
     }
 
-    _stateController.add(SenderConnectionState.disconnected);
-    debugPrint('[SenderWebRTC] Mirroring session terminated cleanly.');
+    if (!preserveFailedState && !_stateController.isClosed) {
+      _stateController.add(SenderConnectionState.disconnected);
+    }
   }
 
   /// Seamlessly switches between back and front camera while streaming
-  Future<void> switchCamera() async {
-    if (_localStream == null ||
-        _currentStreamSource != StreamSourceType.studioCamera) {
-      return;
+  Future<bool> switchCamera() async {
+    if (_currentStreamSource != StreamSourceType.studioCamera) {
+      return false;
     }
-    final videoTracks = _localStream!.getVideoTracks();
-    if (videoTracks.isNotEmpty) {
-      try {
-        await Helper.switchCamera(videoTracks.first);
-        _currentCameraFacing =
-            _currentCameraFacing == CameraFacingMode.environment
-                ? CameraFacingMode.user
-                : CameraFacingMode.environment;
-        debugPrint(
-          '[SenderWebRTC] Switched camera to ${_currentCameraFacing.label}',
-        );
-      } catch (e) {
-        debugPrint('[SenderWebRTC] Error switching camera: $e');
+
+    final targetFacing = _currentCameraFacing == CameraFacingMode.environment
+        ? CameraFacingMode.user
+        : CameraFacingMode.environment;
+
+    // Strategy 1: Attempt native in-place capturer camera switch
+    if (_localStream != null) {
+      final videoTracks = _localStream!.getVideoTracks();
+      if (videoTracks.isNotEmpty) {
+        try {
+          final switched = await Helper.switchCamera(videoTracks.first);
+          if (switched != false) {
+            _currentCameraFacing = targetFacing;
+            return true;
+          }
+        } catch (_) {}
       }
+    }
+
+    // Strategy 2: Fallback to re-acquiring target camera stream and replacing track
+    try {
+      final newStream = await navigator.mediaDevices.getUserMedia(
+        WebRTCConstants.getCameraMediaConstraints(
+          preset: _currentPreset,
+          facing: targetFacing,
+        ),
+      );
+      final newVideoTracks = newStream.getVideoTracks();
+      if (newVideoTracks.isEmpty) {
+        await newStream.dispose();
+        return false;
+      }
+      final newTrack = newVideoTracks.first;
+
+      if (_peerConnection != null) {
+        final senders = await _peerConnection!.getSenders();
+        for (final sender in senders) {
+          if (sender.track?.kind == 'video') {
+            await sender.replaceTrack(newTrack);
+          }
+        }
+      }
+
+      if (_localStream != null) {
+        for (final track in _localStream!.getVideoTracks()) {
+          try {
+            await track.stop();
+          } catch (_) {}
+        }
+        try {
+          await _localStream!.dispose();
+        } catch (_) {}
+      }
+
+      _localStream = newStream;
+      _currentCameraFacing = targetFacing;
+      return true;
+    } catch (e) {
+      _errorController.add('Failed to switch camera: $e');
+      return false;
     }
   }
 
-  /// Sends prompter state synchronization to connected receiver director
   void sendPrompterState(Map<String, dynamic> state) {
-    _sendSignalingMessage(SignalingMessage.prompterStateSync(state));
+    _signalingClient.send(SignalingMessage.prompterStateSync(state));
   }
 
   Future<void> dispose() async {
     await stopMirroring();
+    _signalingClient.dispose();
     await _prompterMessageController.close();
     await _stateController.close();
     await _errorController.close();

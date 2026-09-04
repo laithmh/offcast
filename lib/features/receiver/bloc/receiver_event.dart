@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../core/constants/webrtc_constants.dart';
 import '../../../core/models/prompter_model.dart';
 import 'receiver_state.dart';
 
@@ -119,4 +120,13 @@ class ReceiverPrompterProgressUpdated extends ReceiverEvent {
 
   @override
   List<Object?> get props => [progress];
+}
+
+class ReceiverStreamSourceChanged extends ReceiverEvent {
+  final StreamSourceType streamSource;
+
+  const ReceiverStreamSourceChanged(this.streamSource);
+
+  @override
+  List<Object?> get props => [streamSource];
 }
