@@ -16,6 +16,7 @@
   <img src="https://img.shields.io/badge/Security-Pre--Shared_PIN_(PSP)-blue" alt="Security" />
   <img src="https://img.shields.io/badge/Offline-100%25_Direct_Hotspot-green" alt="Offline" />
   <img src="https://img.shields.io/badge/Platforms-Android_%7C_iOS_%7C_Web_%7C_Windows-lightgrey" alt="Platforms" />
+  <img src="https://img.shields.io/badge/License-Showcase_%2F_All_Rights_Reserved-purple" alt="License" />
 </p>
 
 ---
@@ -175,6 +176,8 @@ dart run flutter_launcher_icons
 
 ---
 
-## 📄 License
+## 📄 License & Rights
 
-This project is open-source software licensed under the **MIT License**.
+This repository is source-available for **portfolio evaluation and educational demonstration purposes only**. All rights are reserved by the author (Laith MH). 
+
+Commercial use, modification for public distribution, re-distribution, and deploying this software or derivative works to public app stores are strictly prohibited without prior written permission. See [LICENSE](LICENSE) for full legal terms.
