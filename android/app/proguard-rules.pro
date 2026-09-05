@@ -4,7 +4,7 @@
 
 # Flutter Plugins
 -keep class com.cloudwebrtc.webrtc.** { *; }
--keep class com.laithmh.hotspot_screen_sharing.** { *; }
+-keep class com.laithmh.offcast.** { *; }
 
 # Keep Network interfaces and reflection for Shelf & WebSockets
 -keepclassmembers class * {

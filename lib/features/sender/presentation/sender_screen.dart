@@ -69,6 +69,7 @@ class _SenderViewState extends State<_SenderView>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late final TextEditingController _ipController;
   late final TextEditingController _portController;
+  late final TextEditingController _pinController;
   late final AnimationController _scanPulseController;
   final _formKey = GlobalKey<FormState>();
   bool _showAdvancedSettings = false;
@@ -80,6 +81,7 @@ class _SenderViewState extends State<_SenderView>
     WidgetsBinding.instance.addObserver(this);
     _ipController = TextEditingController();
     _portController = TextEditingController(text: '8080');
+    _pinController = TextEditingController();
     _scanPulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -105,6 +107,7 @@ class _SenderViewState extends State<_SenderView>
     WidgetsBinding.instance.removeObserver(this);
     _ipController.dispose();
     _portController.dispose();
+    _pinController.dispose();
     super.dispose();
   }
 
@@ -150,6 +153,9 @@ class _SenderViewState extends State<_SenderView>
     }
 
     if (!mounted) return;
+    final rawPin = _pinController.text.trim();
+    final effectivePin = rawPin.isNotEmpty ? rawPin : bloc.state.pairingPin;
+
     bloc.add(
       SenderStartSharingRequested(
         targetHost: effectiveHost,
@@ -158,6 +164,7 @@ class _SenderViewState extends State<_SenderView>
         codecEngine: bloc.state.codecEngine,
         streamSource: bloc.state.streamSource,
         cameraFacing: bloc.state.cameraFacing,
+        pairingPin: effectivePin.isNotEmpty ? effectivePin : null,
       ),
     );
   }
@@ -183,6 +190,9 @@ class _SenderViewState extends State<_SenderView>
         if (state.isAutoDiscovered || state.discoveredDevice != null) {
           _ipController.text = state.targetHost;
           _portController.text = state.targetPort.toString();
+          if (state.pairingPin.isNotEmpty && _pinController.text.isEmpty) {
+            _pinController.text = state.pairingPin;
+          }
         }
 
         if (state.status == SenderConnectionState.failed &&
@@ -281,6 +291,7 @@ class _SenderViewState extends State<_SenderView>
                       TargetHostCard(
                         state: state,
                         scanPulseController: _scanPulseController,
+                        pinController: _pinController,
                       ),
                       const SizedBox(height: 20),
                       QualityPresetCard(state: state, isWide: isWide),

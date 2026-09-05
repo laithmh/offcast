@@ -136,16 +136,25 @@ class _HomeScreenState extends State<HomeScreen> {
         Row(
           children: [
             Container(
-              padding: EdgeInsets.all(isCompact ? 10 : 12),
+              width: isCompact ? 44 : 52,
+              height: isCompact ? 44 : 52,
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: AppTheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: AppTheme.neumorphicShadowElevated,
               ),
-              child: Icon(
-                Icons.wifi_tethering_rounded,
-                color: AppTheme.primary,
-                size: isCompact ? 24 : 28,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset(
+                  'asset/app_logo.png',
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => Icon(
+                    Icons.wifi_tethering_rounded,
+                    color: AppTheme.primary,
+                    size: isCompact ? 24 : 28,
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 14),
@@ -154,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Hotspot Screen Cast',
+                    'OffCast',
                     style: TextStyle(
                       fontSize: isCompact ? 19 : 22,
                       fontWeight: FontWeight.w800,

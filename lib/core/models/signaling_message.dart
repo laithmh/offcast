@@ -48,6 +48,23 @@ class SignalingMessage {
     return const SignalingMessage(type: 'pong');
   }
 
+  factory SignalingMessage.auth({required String pin}) {
+    return SignalingMessage(
+      type: 'auth',
+      payload: {'pin': pin},
+    );
+  }
+
+  factory SignalingMessage.authResponse({
+    required bool success,
+    String? reason,
+  }) {
+    return SignalingMessage(
+      type: 'auth_response',
+      payload: {'success': success, 'reason': ?reason},
+    );
+  }
+
   factory SignalingMessage.orientationChange({
     required int width,
     required int height,

@@ -1,4 +1,4 @@
-package com.laithmh.hotspot_screen_sharing
+package com.laithmh.offcast
 
 import android.app.Notification
 import android.app.NotificationChannel

@@ -1,11 +1,11 @@
 {
-    "name": "hotspot_screen_sharing",
-    "short_name": "hotspot_screen_sharing",
+    "name": "OffCast",
+    "short_name": "OffCast",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "hotspot screen shairing",
+    "background_color": "#0F172A",
+    "theme_color": "#0F172A",
+    "description": "OffCast - Ultra-Low Latency Offline Screen Mirroring",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

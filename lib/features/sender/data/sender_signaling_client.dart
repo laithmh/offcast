@@ -25,39 +25,99 @@ class SenderSignalingClient {
 
   bool get isConnected => _channel != null;
 
-  /// Connects to the Receiver signaling server
-  Future<void> connect(String host, int port, {Duration timeout = const Duration(seconds: 5)}) async {
+  /// Connects to the Receiver signaling server with optional pre-shared pairing PIN
+  Future<void> connect(
+    String host,
+    int port, {
+    String? pin,
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     await disconnect();
 
-    final wsUrl = Uri.parse('ws://$host:$port');
-    debugPrint('[SignalingClient] Connecting to $wsUrl');
-
-    final ws = await WebSocket.connect(wsUrl.toString()).timeout(timeout);
-    _channel = IOWebSocketChannel(ws);
-    _lastActivity = DateTime.now();
-    _startWatchdog();
-
-    _subscription = _channel!.stream.listen(
-      (dynamic rawMessage) {
-        _lastActivity = DateTime.now();
-        try {
-          final json = jsonDecode(rawMessage as String) as Map<String, dynamic>;
-          final message = SignalingMessage.fromJson(json);
-          _messageController.add(message);
-        } catch (e, stack) {
-          debugPrint('[SignalingClient] Error parsing message: $e\n$stack');
-        }
-      },
-      onError: (error) {
-        debugPrint('[SignalingClient] Channel error: $error');
-        _errorController.add('Signaling error: $error');
-      },
-      onDone: () {
-        debugPrint('[SignalingClient] WebSocket closed');
-        _disconnectController.add(null);
-      },
-      cancelOnError: true,
+    final wsUri = Uri(
+      scheme: 'ws',
+      host: host,
+      port: port,
+      path: '/ws',
+      queryParameters: (pin != null && pin.isNotEmpty) ? {'pin': pin} : null,
     );
+    debugPrint('[SignalingClient] Connecting to $wsUri');
+
+    try {
+      final ws = await WebSocket.connect(wsUri.toString()).timeout(timeout);
+      _channel = IOWebSocketChannel(ws);
+      _lastActivity = DateTime.now();
+      _startWatchdog();
+
+      // Send secondary in-band auth message if PIN is provided
+      if (pin != null && pin.isNotEmpty) {
+        send(SignalingMessage.auth(pin: pin));
+      }
+
+      _subscription = _channel!.stream.listen(
+        (dynamic rawMessage) {
+          _lastActivity = DateTime.now();
+          try {
+            final json =
+                jsonDecode(rawMessage as String) as Map<String, dynamic>;
+            final message = SignalingMessage.fromJson(json);
+
+            if (message.type == 'auth_response') {
+              final success = message.payload?['success'] as bool? ?? false;
+              if (!success) {
+                final reason =
+                    message.payload?['reason'] as String? ?? 'Invalid pairing PIN';
+                _errorController.add('Pairing failed: $reason');
+                disconnect();
+                return;
+              } else {
+                debugPrint('[SignalingClient] In-band pairing auth confirmed by server.');
+              }
+            }
+
+            _messageController.add(message);
+          } catch (e, stack) {
+            debugPrint('[SignalingClient] Error parsing message: $e\n$stack');
+          }
+        },
+        onError: (error) {
+          debugPrint('[SignalingClient] Channel error: $error');
+          _errorController.add('Signaling error: $error');
+        },
+        onDone: () {
+          debugPrint('[SignalingClient] WebSocket closed');
+          _disconnectController.add(null);
+        },
+        cancelOnError: true,
+      );
+    } on SocketException catch (e) {
+      debugPrint('[SignalingClient] SocketException during connect: $e');
+      rethrow;
+    } on HttpException catch (e) {
+      debugPrint('[SignalingClient] HttpException during connect: $e');
+      if (e.message.contains('401') || e.message.contains('403')) {
+        throw Exception(
+          'Unauthorized: Incorrect pairing PIN. Please verify the 4-digit PIN on the receiver screen.',
+        );
+      } else if (e.message.contains('429')) {
+        throw Exception(
+          'Too many failed PIN attempts. Locked out for 30 seconds.',
+        );
+      }
+      rethrow;
+    } catch (e) {
+      final str = e.toString();
+      if (str.contains('401') || str.contains('403')) {
+        throw Exception(
+          'Unauthorized: Incorrect pairing PIN. Please verify the 4-digit PIN on the receiver screen.',
+        );
+      } else if (str.contains('429')) {
+        throw Exception(
+          'Too many failed PIN attempts. Locked out for 30 seconds.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// Sends a signaling message to the receiver

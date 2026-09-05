@@ -40,6 +40,8 @@ class ReceiverState extends Equatable {
   final PrompterConfig prompterConfig;
   final bool isDirectorPrompterOpen;
   final bool isPrompterOverlayVisible;
+  final String pairingPin;
+  final bool isPinRequired;
   final String? errorMessage;
 
   const ReceiverState({
@@ -54,6 +56,8 @@ class ReceiverState extends Equatable {
     this.prompterConfig = const PrompterConfig(),
     this.isDirectorPrompterOpen = false,
     this.isPrompterOverlayVisible = false,
+    this.pairingPin = '',
+    this.isPinRequired = true,
     this.errorMessage,
   });
 
@@ -69,6 +73,8 @@ class ReceiverState extends Equatable {
     PrompterConfig? prompterConfig,
     bool? isDirectorPrompterOpen,
     bool? isPrompterOverlayVisible,
+    String? pairingPin,
+    bool? isPinRequired,
     String? errorMessage,
   }) {
     return ReceiverState(
@@ -85,6 +91,8 @@ class ReceiverState extends Equatable {
           isDirectorPrompterOpen ?? this.isDirectorPrompterOpen,
       isPrompterOverlayVisible:
           isPrompterOverlayVisible ?? this.isPrompterOverlayVisible,
+      pairingPin: pairingPin ?? this.pairingPin,
+      isPinRequired: isPinRequired ?? this.isPinRequired,
       errorMessage: errorMessage,
     );
   }
@@ -102,6 +110,8 @@ class ReceiverState extends Equatable {
     prompterConfig,
     isDirectorPrompterOpen,
     isPrompterOverlayVisible,
+    pairingPin,
+    isPinRequired,
     errorMessage,
   ];
 }

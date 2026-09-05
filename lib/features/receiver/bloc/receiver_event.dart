@@ -130,3 +130,17 @@ class ReceiverStreamSourceChanged extends ReceiverEvent {
   @override
   List<Object?> get props => [streamSource];
 }
+
+class ReceiverRegeneratePinRequested extends ReceiverEvent {
+  const ReceiverRegeneratePinRequested();
+}
+
+class ReceiverPinSecurityToggled extends ReceiverEvent {
+  final bool isRequired;
+
+  const ReceiverPinSecurityToggled(this.isRequired);
+
+  @override
+  List<Object?> get props => [isRequired];
+}
+

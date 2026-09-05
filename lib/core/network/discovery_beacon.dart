@@ -13,6 +13,7 @@ class DiscoveredDevice {
   final String deviceName;
   final DateTime lastSeen;
   final bool isVerified;
+  final String? pin;
 
   const DiscoveredDevice({
     required this.ip,
@@ -21,6 +22,7 @@ class DiscoveredDevice {
     required this.deviceName,
     required this.lastSeen,
     this.isVerified = false,
+    this.pin,
   });
 
   String get wsUrl => 'ws://$ip:$port';
@@ -39,21 +41,23 @@ class DiscoveredDevice {
     final validPort = (parsedPort >= 1 && parsedPort <= 65535)
         ? parsedPort
         : 8080;
+    final pin = json['pin'] as String?;
 
     return DiscoveredDevice(
       ip: verifiedIp,
       port: validPort,
-      service: json['service'] as String? ?? 'hotspot_screen_sharing',
+      service: json['service'] as String? ?? 'offcast',
       deviceName: json['name'] as String? ?? 'Receiver Device',
       lastSeen: DateTime.now(),
       isVerified: true,
+      pin: pin,
     );
   }
 }
 
 class DiscoveryBroadcaster {
   static const int broadcastPort = 8888;
-  static const String serviceName = 'hotspot_screen_sharing';
+  static const String serviceName = 'offcast';
 
   RawDatagramSocket? _socket;
   Timer? _broadcastTimer;
@@ -62,6 +66,7 @@ class DiscoveryBroadcaster {
     required String localIp,
     required int signalingPort,
     String? deviceName,
+    String? pin,
   }) async {
     await stop();
 
@@ -86,6 +91,7 @@ class DiscoveryBroadcaster {
           'ip': localIp,
           'port': signalingPort,
           'name': deviceName ?? 'Receiver (${Platform.operatingSystem})',
+          if (pin != null && pin.isNotEmpty) 'pin': pin,
         }),
       );
 
@@ -118,7 +124,8 @@ class DiscoveryBroadcaster {
 
 class DiscoveryListener {
   static const int broadcastPort = 8888;
-  static const String serviceName = 'hotspot_screen_sharing';
+  static const String serviceName = 'offcast';
+  static const Set<String> supportedServices = {'offcast', 'hotspot_screen_sharing'};
 
   RawDatagramSocket? _socket;
   final StreamController<DiscoveredDevice> _deviceController =
@@ -144,7 +151,7 @@ class DiscoveryListener {
             try {
               final json = jsonDecode(utf8.decode(datagram.data));
               if (json is Map<String, dynamic> &&
-                  json['service'] == serviceName) {
+                  supportedServices.contains(json['service'])) {
                 _deviceController.add(
                   DiscoveredDevice.fromJson(json, datagram.address.address),
                 );

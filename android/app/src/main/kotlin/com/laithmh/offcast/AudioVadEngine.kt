@@ -1,4 +1,4 @@
-package com.laithmh.hotspot_screen_sharing
+package com.laithmh.offcast
 
 import android.Manifest
 import android.content.Context

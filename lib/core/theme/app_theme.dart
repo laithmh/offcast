@@ -48,6 +48,21 @@ class AppTheme {
     ),
   ];
 
+  static List<BoxShadow> get neumorphicShadowSunken => const [
+    BoxShadow(
+      color: shadowDark,
+      offset: Offset(2, 2),
+      blurRadius: 4,
+      spreadRadius: 0,
+    ),
+    BoxShadow(
+      color: shadowLight,
+      offset: Offset(-2, -2),
+      blurRadius: 4,
+      spreadRadius: 0,
+    ),
+  ];
+
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,

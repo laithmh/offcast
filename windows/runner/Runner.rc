@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.laithmh" "\0"
-            VALUE "FileDescription", "hotspot_screen_sharing" "\0"
+            VALUE "FileDescription", "OffCast" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "hotspot_screen_sharing" "\0"
+            VALUE "InternalName", "OffCast" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.laithmh. All rights reserved." "\0"
-            VALUE "OriginalFilename", "hotspot_screen_sharing.exe" "\0"
-            VALUE "ProductName", "hotspot_screen_sharing" "\0"
+            VALUE "OriginalFilename", "OffCast.exe" "\0"
+            VALUE "ProductName", "OffCast" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

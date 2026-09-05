@@ -70,6 +70,7 @@ class SenderWebRTCService {
     CodecEngine codecEngine = CodecEngine.vp8,
     StreamSourceType streamSource = StreamSourceType.screen,
     CameraFacingMode cameraFacing = CameraFacingMode.environment,
+    String? pairingPin,
   }) async {
     _currentTargetHost = host;
     _currentPreset = preset;
@@ -158,7 +159,7 @@ class SenderWebRTCService {
       // 4. Connect to Receiver Signaling Server via WebSocket
       _stateController.add(SenderConnectionState.connectingSignaling);
       _setupSignalingSubscriptions();
-      await _signalingClient.connect(host, port);
+      await _signalingClient.connect(host, port, pin: pairingPin);
       _stateController.add(SenderConnectionState.connectedSignaling);
 
       // Transmit stream source metadata so receiver configures UI

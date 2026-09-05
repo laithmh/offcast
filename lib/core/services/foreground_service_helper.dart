@@ -8,7 +8,7 @@ class ForegroundServiceHelper {
   ForegroundServiceHelper._();
 
   static const MethodChannel _channel = MethodChannel(
-    'com.laithmh.hotspot_screen_sharing/foreground_service',
+    'com.laithmh.offcast/foreground_service',
   );
 
   static final StreamController<void> _stopEventController =

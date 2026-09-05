@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/neumorphic_widgets.dart';
+import '../../bloc/receiver_bloc.dart';
+import '../../bloc/receiver_event.dart';
 import '../../bloc/receiver_state.dart';
 
 /// Standby / Waiting placeholder screen for the Receiver display when no stream is active.
@@ -155,7 +158,119 @@ class ReceiverWaitingView extends StatelessWidget {
                 ),
 
                 if (hasNetwork) ...[
-                  const SizedBox(height: 24),
+                  if (state.pairingPin.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    NeumorphicCard(
+                      borderRadius: 22,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primary.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.lock_outline_rounded,
+                                  color: AppTheme.primary,
+                                  size: 16,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Pairing Security PIN',
+                                style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.refresh_rounded,
+                                  size: 18,
+                                  color: AppTheme.textSecondary,
+                                ),
+                                tooltip: 'Regenerate PIN',
+                                onPressed: () {
+                                  context.read<ReceiverBloc>().add(
+                                    const ReceiverRegeneratePinRequested(),
+                                  );
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.copy_rounded,
+                                  size: 18,
+                                  color: AppTheme.textSecondary,
+                                ),
+                                tooltip: 'Copy PIN',
+                                onPressed: () {
+                                  Clipboard.setData(
+                                    ClipboardData(text: state.pairingPin),
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('PIN copied to clipboard'),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: state.pairingPin.split('').map((digit) {
+                              return Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 6),
+                                width: 44,
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surfaceElevated,
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: AppTheme.neumorphicShadowSunken,
+                                  border: Border.all(
+                                    color: AppTheme.primary.withValues(alpha: 0.35),
+                                    width: 1.2,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    digit,
+                                    style: const TextStyle(
+                                      color: AppTheme.primary,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Enter this 4-digit PIN on the sender phone to authorize connection.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 11,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   NeumorphicCard(
                     borderRadius: 18,
                     padding: const EdgeInsets.symmetric(

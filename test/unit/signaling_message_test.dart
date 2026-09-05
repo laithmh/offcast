@@ -226,6 +226,30 @@ void main() {
       },
     );
 
+    test('Auth and AuthResponse message serialization and deserialization', () {
+      final authMsg = SignalingMessage.auth(pin: '4829');
+      expect(authMsg.type, 'auth');
+      expect(authMsg.payload?['pin'], '4829');
+
+      final authDecoded = SignalingMessage.deserialize(authMsg.serialize());
+      expect(authDecoded?.type, 'auth');
+      expect(authDecoded?.payload?['pin'], '4829');
+
+      final authRespSuccess = SignalingMessage.authResponse(success: true);
+      final respDecoded = SignalingMessage.deserialize(authRespSuccess.serialize());
+      expect(respDecoded?.type, 'auth_response');
+      expect(respDecoded?.payload?['success'], true);
+
+      final authRespFail = SignalingMessage.authResponse(
+        success: false,
+        reason: 'Invalid pairing PIN',
+      );
+      final failDecoded = SignalingMessage.deserialize(authRespFail.serialize());
+      expect(failDecoded?.type, 'auth_response');
+      expect(failDecoded?.payload?['success'], false);
+      expect(failDecoded?.payload?['reason'], 'Invalid pairing PIN');
+    });
+
     test('SignalingMessage handles malformed JSON without crashing', () {
       // Non-map payload and candidate
       final malformed = SignalingMessage.fromJson({

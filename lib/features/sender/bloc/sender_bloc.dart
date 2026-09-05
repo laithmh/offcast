@@ -42,6 +42,7 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     on<SenderPrompterOverlayToggled>(_onPrompterOverlayToggled);
     on<SenderPrompterRemoteMessageReceived>(_onPrompterRemoteMessageReceived);
     on<SenderPrompterProgressUpdated>(_onPrompterProgressUpdated);
+    on<SenderPinChanged>(_onPinChanged);
 
     _stateSubscription = webrtcService.stateStream.listen((connState) {
       add(SenderConnectionStateUpdated(connState));
@@ -405,10 +406,15 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     }
   }
 
+  void _onPinChanged(SenderPinChanged event, Emitter<SenderState> emit) {
+    emit(state.copyWith(pairingPin: event.pin));
+  }
+
   Future<void> _onStartSharing(
     SenderStartSharingRequested event,
     Emitter<SenderState> emit,
   ) async {
+    final effectivePin = event.pairingPin ?? state.pairingPin;
     emit(
       state.copyWith(
         targetHost: event.targetHost,
@@ -417,6 +423,7 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
         codecEngine: event.codecEngine,
         streamSource: event.streamSource,
         cameraFacing: event.cameraFacing,
+        pairingPin: effectivePin,
         errorMessage: null,
       ),
     );
@@ -428,6 +435,7 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
       codecEngine: event.codecEngine,
       streamSource: event.streamSource,
       cameraFacing: event.cameraFacing,
+      pairingPin: effectivePin.isNotEmpty ? effectivePin : null,
     );
   }
 
@@ -476,6 +484,9 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
           discoveredDevice: event.device,
           isAutoDiscovered: true,
           isVerified: true,
+          pairingPin: (event.device.pin != null && event.device.pin!.isNotEmpty)
+              ? event.device.pin
+              : state.pairingPin,
         ),
       );
     }

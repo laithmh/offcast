@@ -1,4 +1,4 @@
-package com.laithmh.hotspot_screen_sharing
+package com.laithmh.offcast
 
 import android.content.Context
 import android.content.Intent
@@ -19,9 +19,9 @@ class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var methodChannel: MethodChannel? = null
-    private val channelName = "com.laithmh.hotspot_screen_sharing/foreground_service"
+    private val channelName = "com.laithmh.offcast/foreground_service"
     private var vadEventChannel: EventChannel? = null
-    private val vadChannelName = "com.laithmh.hotspot_screen_sharing/audio_vad"
+    private val vadChannelName = "com.laithmh.offcast/audio_vad"
 
     companion object {
         var instance: MainActivity? = null

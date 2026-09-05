@@ -24,19 +24,22 @@ void main() async {
     ),
   );
 
-  runApp(const HotspotScreenSharingApp());
+  runApp(const OffCastApp());
 }
 
-class HotspotScreenSharingApp extends StatelessWidget {
-  const HotspotScreenSharingApp({super.key});
+class OffCastApp extends StatelessWidget {
+  const OffCastApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Hotspot Screen Sharing',
+      title: 'OffCast',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: AppRouter.router,
     );
   }
 }
+
+/// Backwards-compatible alias for existing tests
+typedef HotspotScreenSharingApp = OffCastApp;

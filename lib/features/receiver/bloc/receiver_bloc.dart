@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -40,6 +41,8 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     on<ReceiverPrompterCommandDispatched>(_onPrompterCommandDispatched);
     on<ReceiverPrompterScriptDispatched>(_onPrompterScriptDispatched);
     on<ReceiverStreamSourceChanged>(_onStreamSourceChanged);
+    on<ReceiverRegeneratePinRequested>(_onRegeneratePin);
+    on<ReceiverPinSecurityToggled>(_onPinSecurityToggled);
 
     _clientStatusSub = signalingServer.clientConnectionStatus.listen((
       connected,
@@ -99,13 +102,21 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
       // Re-broadcast UDP beacon on the newly detected IP
       if (event.detectedIp != null &&
           state.status == ReceiverStatus.listening) {
+        final isHotspot = event.detectedIp == '192.168.43.1';
         _discoveryBroadcaster.start(
           localIp: event.detectedIp!,
           signalingPort: state.port,
           deviceName: _deviceName,
+          pin: (state.isPinRequired && isHotspot) ? state.pairingPin : null,
         );
       }
     }
+  }
+
+  String _generateSecurePin() {
+    final rng = Random.secure();
+    final pinInt = rng.nextInt(9000) + 1000;
+    return pinInt.toString();
   }
 
   Future<void> _onStartServer(
@@ -117,18 +128,28 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     try {
       await ForegroundServiceHelper.bindToWifiNetwork();
       await webrtcService.initialize();
-      final port = await signalingServer.start(port: event.port);
+
+      final pin = state.pairingPin.isNotEmpty
+          ? state.pairingPin
+          : _generateSecurePin();
+
+      final port = await signalingServer.start(
+        port: event.port,
+        requiredPin: state.isPinRequired ? pin : null,
+      );
       final allIps = await NetworkHelper.getAllLocalIps();
       final ip = allIps.isNotEmpty ? allIps.first : null;
 
       _deviceName = await ForegroundServiceHelper.getDeviceName();
 
       if (ip != null) {
-        // Start zero-touch UDP discovery beacon
+        final isHotspot = ip == '192.168.43.1';
+        // Broadcast PIN over beacon only on dedicated 1-to-1 Hotspot network
         await _discoveryBroadcaster.start(
           localIp: ip,
           signalingPort: port,
           deviceName: _deviceName,
+          pin: (state.isPinRequired && isHotspot) ? pin : null,
         );
       }
 
@@ -138,6 +159,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
           port: port,
           localIp: ip,
           availableIps: allIps,
+          pairingPin: pin,
           isClientConnected: false,
           isStreaming: false,
         ),
@@ -153,12 +175,51 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     }
   }
 
+  void _onRegeneratePin(
+    ReceiverRegeneratePinRequested event,
+    Emitter<ReceiverState> emit,
+  ) {
+    final newPin = _generateSecurePin();
+    signalingServer.updateRequiredPin(state.isPinRequired ? newPin : null);
+    emit(state.copyWith(pairingPin: newPin));
+    if (state.localIp != null && state.status == ReceiverStatus.listening) {
+      final isHotspot = state.localIp == '192.168.43.1';
+      _discoveryBroadcaster.start(
+        localIp: state.localIp!,
+        signalingPort: state.port,
+        deviceName: _deviceName,
+        pin: (state.isPinRequired && isHotspot) ? newPin : null,
+      );
+    }
+  }
+
+  void _onPinSecurityToggled(
+    ReceiverPinSecurityToggled event,
+    Emitter<ReceiverState> emit,
+  ) {
+    final pin =
+        state.pairingPin.isNotEmpty ? state.pairingPin : _generateSecurePin();
+    signalingServer.updateRequiredPin(event.isRequired ? pin : null);
+    emit(state.copyWith(isPinRequired: event.isRequired, pairingPin: pin));
+    if (state.localIp != null && state.status == ReceiverStatus.listening) {
+      final isHotspot = state.localIp == '192.168.43.1';
+      _discoveryBroadcaster.start(
+        localIp: state.localIp!,
+        signalingPort: state.port,
+        deviceName: _deviceName,
+        pin: (event.isRequired && isHotspot) ? pin : null,
+      );
+    }
+  }
+
   void _onIpSelected(ReceiverIpSelected event, Emitter<ReceiverState> emit) {
     emit(state.copyWith(localIp: event.selectedIp));
+    final isHotspot = event.selectedIp == '192.168.43.1';
     _discoveryBroadcaster.start(
       localIp: event.selectedIp,
       signalingPort: state.port,
       deviceName: _deviceName,
+      pin: (state.isPinRequired && isHotspot) ? state.pairingPin : null,
     );
   }
 

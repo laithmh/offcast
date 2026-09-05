@@ -11,11 +11,13 @@ import '../../bloc/sender_state.dart';
 class TargetHostCard extends StatelessWidget {
   final SenderState state;
   final AnimationController scanPulseController;
+  final TextEditingController? pinController;
 
   const TargetHostCard({
     super.key,
     required this.state,
     required this.scanPulseController,
+    this.pinController,
   });
 
   @override
@@ -151,6 +153,92 @@ class TargetHostCard extends StatelessWidget {
                     ),
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceElevated,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: AppTheme.neumorphicShadowSunken,
+              border: Border.all(
+                color: state.pairingPin.isNotEmpty
+                    ? AppTheme.primary.withValues(alpha: 0.4)
+                    : AppTheme.shadowDark.withValues(alpha: 0.5),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.lock_outline_rounded,
+                  size: 18,
+                  color: AppTheme.primary,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'PIN:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextFormField(
+                    controller: pinController,
+                    initialValue: pinController == null ? state.pairingPin : null,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3.0,
+                      color: AppTheme.primary,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. 4829',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        letterSpacing: 2.0,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textMuted,
+                      ),
+                      counterText: '',
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: (val) {
+                      context.read<SenderBloc>().add(
+                        SenderPinChanged(val.trim()),
+                      );
+                    },
+                  ),
+                ),
+                if (state.discoveredDevice?.pin != null &&
+                    state.discoveredDevice!.pin!.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Auto-Paired',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.success,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

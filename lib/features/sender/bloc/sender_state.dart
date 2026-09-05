@@ -20,6 +20,7 @@ class SenderState extends Equatable {
   final CameraFacingMode cameraFacing;
   final PrompterConfig prompterConfig;
   final bool isPrompterOverlay;
+  final String pairingPin;
   final String? errorMessage;
 
   const SenderState({
@@ -37,6 +38,7 @@ class SenderState extends Equatable {
     this.cameraFacing = CameraFacingMode.environment,
     this.prompterConfig = const PrompterConfig(),
     this.isPrompterOverlay = false,
+    this.pairingPin = '',
     this.errorMessage,
   });
 
@@ -62,6 +64,7 @@ class SenderState extends Equatable {
     CameraFacingMode? cameraFacing,
     PrompterConfig? prompterConfig,
     bool? isPrompterOverlay,
+    String? pairingPin,
     String? errorMessage,
   }) {
     return SenderState(
@@ -79,6 +82,7 @@ class SenderState extends Equatable {
       cameraFacing: cameraFacing ?? this.cameraFacing,
       prompterConfig: prompterConfig ?? this.prompterConfig,
       isPrompterOverlay: isPrompterOverlay ?? this.isPrompterOverlay,
+      pairingPin: pairingPin ?? this.pairingPin,
       errorMessage: errorMessage,
     );
   }
@@ -99,6 +103,7 @@ class SenderState extends Equatable {
     cameraFacing,
     prompterConfig,
     isPrompterOverlay,
+    pairingPin,
     errorMessage,
   ];
 }

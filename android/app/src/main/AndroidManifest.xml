@@ -23,7 +23,7 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <application
-        android:label="hotspot_screen_sharing"
+        android:label="OffCast"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <service

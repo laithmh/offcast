@@ -19,6 +19,7 @@ class SenderStartSharingRequested extends SenderEvent {
   final CodecEngine codecEngine;
   final StreamSourceType streamSource;
   final CameraFacingMode cameraFacing;
+  final String? pairingPin;
 
   const SenderStartSharingRequested({
     required this.targetHost,
@@ -27,6 +28,7 @@ class SenderStartSharingRequested extends SenderEvent {
     this.codecEngine = CodecEngine.vp8,
     this.streamSource = StreamSourceType.screen,
     this.cameraFacing = CameraFacingMode.environment,
+    this.pairingPin,
   });
 
   @override
@@ -37,7 +39,17 @@ class SenderStartSharingRequested extends SenderEvent {
     codecEngine,
     streamSource,
     cameraFacing,
+    pairingPin,
   ];
+}
+
+class SenderPinChanged extends SenderEvent {
+  final String pin;
+
+  const SenderPinChanged(this.pin);
+
+  @override
+  List<Object?> get props => [pin];
 }
 
 class SenderStopSharingRequested extends SenderEvent {

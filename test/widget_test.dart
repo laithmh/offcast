@@ -8,7 +8,7 @@ void main() {
     await tester.pumpWidget(const HotspotScreenSharingApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Hotspot Screen Cast'), findsOneWidget);
+    expect(find.text('OffCast'), findsOneWidget);
     expect(find.text('Receiver Mode'), findsOneWidget);
     expect(find.text('Sender Mode'), findsOneWidget);
     expect(find.text('Start Receiver'), findsOneWidget);

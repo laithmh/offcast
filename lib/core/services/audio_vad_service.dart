@@ -22,10 +22,10 @@ class VadEvent {
 
 class AudioVadService {
   static const EventChannel _eventChannel = EventChannel(
-    'com.laithmh.hotspot_screen_sharing/audio_vad',
+    'com.laithmh.offcast/audio_vad',
   );
   static const MethodChannel _methodChannel = MethodChannel(
-    'com.laithmh.hotspot_screen_sharing/foreground_service',
+    'com.laithmh.offcast/foreground_service',
   );
 
   final StreamController<VadEvent> _vadController =
