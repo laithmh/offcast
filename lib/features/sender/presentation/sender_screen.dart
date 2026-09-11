@@ -110,11 +110,12 @@ class _SenderViewState extends State<_SenderView>
   }
 
   Future<void> _startSharing() async {
+    final bloc = context.read<SenderBloc>();
+    if (bloc.state.isBusy) return;
+
     if (_formKey.currentState != null && !_formKey.currentState!.validate()) {
       return;
     }
-
-    final bloc = context.read<SenderBloc>();
 
     // Validate local network connectivity
     final clientIp =
@@ -329,6 +330,10 @@ class _SenderViewState extends State<_SenderView>
                       ),
                       const SizedBox(height: 20),
                       QualityPresetCard(state: state, isWide: isWide),
+                      if (state.isBusy) ...[
+                        const SizedBox(height: 16),
+                        _buildConnectingStatusCard(state),
+                      ],
                       const SizedBox(height: 24),
                       _buildActionButtons(state),
                       const SizedBox(height: 16),
@@ -347,6 +352,88 @@ class _SenderViewState extends State<_SenderView>
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildConnectingStatusCard(SenderState state) {
+    String stepTitle;
+    String stepSubtitle;
+    IconData icon;
+
+    switch (state.status) {
+      case SenderConnectionState.capturingScreen:
+        stepTitle = 'Authorizing Screen Capture';
+        stepSubtitle = 'Please accept the Android screen capture prompt...';
+        icon = Icons.screen_share_rounded;
+        break;
+      case SenderConnectionState.connectingSignaling:
+        stepTitle = 'Connecting to Receiver';
+        stepSubtitle =
+            'Binding Wi-Fi socket to ${state.targetHost.isNotEmpty ? state.targetHost : "Receiver"}...';
+        icon = Icons.wifi_tethering_rounded;
+        break;
+      case SenderConnectionState.connectedSignaling:
+      case SenderConnectionState.negotiatingWebRTC:
+        stepTitle = 'Establishing WebRTC Stream';
+        stepSubtitle = 'Negotiating zero-latency P2P video pipeline...';
+        icon = Icons.sync_rounded;
+        break;
+      default:
+        stepTitle = 'Connecting';
+        stepSubtitle = 'Setting up wireless broadcast...';
+        icon = Icons.sensors_rounded;
+    }
+
+    return NeumorphicCard(
+      borderRadius: 16,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      color: AppTheme.surfaceElevated,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accent),
+                  ),
+                ),
+                Icon(icon, size: 14, color: AppTheme.accent),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  stepTitle,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  stepSubtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -427,29 +514,77 @@ class _SenderViewState extends State<_SenderView>
 
   Widget _buildActionButtons(SenderState state) {
     final hasWifi = state.clientIp != null;
+    final isBusy = state.isBusy;
+
+    String buttonText;
+    if (isBusy) {
+      switch (state.status) {
+        case SenderConnectionState.capturingScreen:
+          buttonText = 'Starting Capture...';
+          break;
+        case SenderConnectionState.connectingSignaling:
+          buttonText = 'Connecting to Monitor...';
+          break;
+        case SenderConnectionState.connectedSignaling:
+          buttonText = 'Preparing Stream...';
+          break;
+        case SenderConnectionState.negotiatingWebRTC:
+          buttonText = 'Negotiating WebRTC...';
+          break;
+        default:
+          buttonText = 'Connecting...';
+      }
+    } else if (!hasWifi) {
+      buttonText = 'Connect to Hotspot to Stream';
+    } else {
+      buttonText = 'Start Viewfinder Broadcast';
+    }
 
     return NeumorphicButton(
-      onPressed: hasWifi
-          ? _startSharing
-          : () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Please connect to the Receiver’s Wi-Fi Hotspot first.',
-                  ),
-                  backgroundColor: AppTheme.warning,
-                ),
-              );
-            },
+      onPressed: isBusy
+          ? null
+          : (hasWifi
+              ? _startSharing
+              : () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Please connect to the Receiver’s Wi-Fi Hotspot first.',
+                      ),
+                      backgroundColor: AppTheme.warning,
+                    ),
+                  );
+                }),
       isPrimary: true,
-      backgroundColor: hasWifi ? AppTheme.primary : AppTheme.surfaceElevated,
-      textColor: hasWifi ? Colors.white : AppTheme.textMuted,
+      backgroundColor: isBusy
+          ? AppTheme.primary.withValues(alpha: 0.75)
+          : (hasWifi ? AppTheme.primary : AppTheme.surfaceElevated),
+      textColor: (hasWifi || isBusy) ? Colors.white : AppTheme.textMuted,
       borderRadius: 18,
-      icon: !hasWifi ? Icons.wifi_off_rounded : Icons.play_arrow_rounded,
-      child: Text(
-        !hasWifi
-            ? 'Connect to Hotspot to Stream'
-            : 'Start Viewfinder Broadcast',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (isBusy) ...[
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ] else ...[
+            Icon(
+              !hasWifi ? Icons.wifi_off_rounded : Icons.play_arrow_rounded,
+              size: 20,
+              color: hasWifi ? Colors.white : AppTheme.textMuted,
+            ),
+            const SizedBox(width: 8),
+          ],
+          Text(buttonText),
+        ],
       ),
     );
   }
