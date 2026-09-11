@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../../core/network/discovery_beacon.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/permission_helper.dart';
 import '../../../core/widgets/exit_confirmation_dialog.dart';
@@ -114,6 +115,26 @@ class _SenderViewState extends State<_SenderView>
     }
 
     final bloc = context.read<SenderBloc>();
+
+    // Validate local network connectivity
+    final clientIp =
+        bloc.state.clientIp ?? await NetworkHelper.getMyDeviceIp();
+    if (clientIp == null || clientIp.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No Wi-Fi or Hotspot connection detected. Please connect this device to the Receiver’s Wi-Fi Hotspot.',
+            ),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
     final rawHost = _ipController.text.trim();
     final effectiveHost = rawHost.isNotEmpty
         ? rawHost

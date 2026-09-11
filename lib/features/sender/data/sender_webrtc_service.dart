@@ -142,16 +142,18 @@ class SenderWebRTCService {
           break;
         } catch (connErr) {
           final errStr = connErr.toString();
-          final isRouteError = errStr.contains('No route to host') ||
+          final isRetryable = errStr.contains('No route to host') ||
               errStr.contains('113') ||
               errStr.contains('Network is unreachable') ||
-              errStr.contains('101');
-          if (isRouteError && attempts < 3) {
+              errStr.contains('101') ||
+              errStr.contains('Connection refused') ||
+              errStr.contains('111');
+          if (isRetryable && attempts < 4) {
             debugPrint(
-              '[SenderWebRTC] Route error on attempt $attempts ($connErr). Re-binding Wi-Fi and retrying...',
+              '[SenderWebRTC] Connection attempt $attempts failed ($connErr). Retrying in 600ms...',
             );
             await ForegroundServiceHelper.bindToWifiNetwork();
-            await Future<void>.delayed(const Duration(milliseconds: 500));
+            await Future<void>.delayed(const Duration(milliseconds: 600));
             continue;
           }
           rethrow;
@@ -329,12 +331,12 @@ class SenderWebRTCService {
       } else if (errorStr.contains('Network is unreachable') ||
           errorStr.contains('101')) {
         _errorController.add(
-          'Wi-Fi disconnected. Please connect this device to the Receiver’s Wi-Fi Hotspot.',
+          'Network is unreachable. Please connect this device to the Receiver’s Wi-Fi Hotspot.',
         );
       } else if (errorStr.contains('No route to host') ||
           errorStr.contains('113')) {
         _errorController.add(
-          'Cannot reach $host:$port. Ensure 4G Mobile Data is turned OFF and both devices are connected to the same Hotspot.',
+          'Cannot reach Receiver at $host:$port. Ensure both devices are connected to the same Wi-Fi Hotspot and Receiver Mode is active.',
         );
       } else if (e is TimeoutException) {
         _errorController.add(
