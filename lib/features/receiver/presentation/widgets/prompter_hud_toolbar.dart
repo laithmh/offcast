@@ -15,7 +15,6 @@ class PrompterHudToolbar extends StatelessWidget {
   final bool isCompact;
   final VoidCallback onRewind;
   final VoidCallback onTogglePlay;
-  final VoidCallback onSwitchCamera;
   final VoidCallback onToggleBackground;
   final VoidCallback? onResetPosition;
   final VoidCallback onOpenEditor;
@@ -32,7 +31,6 @@ class PrompterHudToolbar extends StatelessWidget {
     required this.isCompact,
     required this.onRewind,
     required this.onTogglePlay,
-    required this.onSwitchCamera,
     required this.onToggleBackground,
     this.onResetPosition,
     required this.onOpenEditor,
@@ -221,19 +219,6 @@ class PrompterHudToolbar extends StatelessWidget {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
             onPressed: onTogglePlay,
-          ),
-
-          // Remote Flip Camera Button
-          IconButton(
-            icon: const Icon(
-              Icons.cameraswitch_rounded,
-              color: AppTheme.accent,
-              size: 19,
-            ),
-            tooltip: 'Remote Flip Camera',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-            onPressed: onSwitchCamera,
           ),
 
           // Transparent Background Toggle Button

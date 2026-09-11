@@ -32,19 +32,37 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
     super.dispose();
   }
 
-  void _pushScript() {
+  void _applyScript({bool showFeedback = false}) {
     final text = _scriptController.text.trim();
-    if (text.isNotEmpty) {
-      context.read<ReceiverBloc>().add(ReceiverPrompterScriptDispatched(text));
-      setState(() => _isEditing = false);
+    context.read<ReceiverBloc>().add(ReceiverPrompterScriptDispatched(text));
+    setState(() => _isEditing = false);
+    if (showFeedback && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Script pushed to Talent display!'),
+          content: Text('Script updated on Prompter!'),
           backgroundColor: AppTheme.success,
           duration: Duration(seconds: 2),
         ),
       );
     }
+  }
+
+  int get _wordCount {
+    final text = _scriptController.text.trim();
+    if (text.isEmpty) return 0;
+    return text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+  }
+
+  String _formatEstReadTime(double speedWpm) {
+    final words = _wordCount;
+    if (words == 0 || speedWpm <= 0) return '0s';
+    final totalSeconds = (words / speedWpm * 60).round();
+    final mins = totalSeconds ~/ 60;
+    final secs = totalSeconds % 60;
+    if (mins > 0) {
+      return '${mins}m ${secs.toString().padLeft(2, '0')}s';
+    }
+    return '${secs}s';
   }
 
   @override
@@ -108,7 +126,7 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                         const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
-                            'Director Prompter Remote',
+                            'Teleprompter Studio',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -174,7 +192,7 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'TALENT READING PROGRESS',
+              'READING PROGRESS',
               style: TextStyle(
                 color: Colors.white60,
                 fontSize: 11,
@@ -379,17 +397,42 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
   }
 
   void _showSaveScriptDialog(BuildContext context, ReceiverState state) {
-    final titleController = TextEditingController(
-      text: 'Script ${state.savedScripts.length + 1}',
-    );
+    final activeScript = state.savedScripts
+        .where((s) => s.id == state.activeScriptId)
+        .firstOrNull;
+
+    // Smart title suggestion:
+    // If active script exists, use its title.
+    // Otherwise derive from first non-empty line of text, or fallback to 'Script N'
+    String initialTitle;
+    if (activeScript != null) {
+      initialTitle = activeScript.title;
+    } else {
+      final lines = _scriptController.text
+          .trim()
+          .split('\n')
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty);
+      if (lines.isNotEmpty) {
+        final firstLine = lines.first;
+        initialTitle = firstLine.length > 28
+            ? '${firstLine.substring(0, 28).trim()}...'
+            : firstLine;
+      } else {
+        initialTitle = 'Script ${state.savedScripts.length + 1}';
+      }
+    }
+
+    final titleController = TextEditingController(text: initialTitle);
+
     showDialog<void>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: const Color(0xFF161B22),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Save to Script Library',
-          style: TextStyle(
+        title: Text(
+          activeScript != null ? 'Update / Save Script' : 'Save to Script Library',
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -399,9 +442,11 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Enter a title for this script:',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+            Text(
+              activeScript != null
+                  ? 'Update current script or save with a new name:'
+                  : 'Enter a title for this teleprompter script:',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -428,6 +473,42 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
             onPressed: () => Navigator.of(dialogCtx).pop(),
             child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
           ),
+          if (activeScript != null)
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: const BorderSide(color: Colors.white24),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () {
+                final title = titleController.text.trim();
+                if (title.isNotEmpty) {
+                  final newScript = SavedScript(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    title: title,
+                    content: _scriptController.text,
+                    scrollSpeedWpm: state.prompterConfig.scrollSpeedWpm,
+                    fontSize: state.prompterConfig.fontSize,
+                    updatedAt: DateTime.now(),
+                  );
+                  context.read<ReceiverBloc>().add(
+                        ReceiverPrompterScriptSaved(newScript),
+                      );
+                  _applyScript();
+                  Navigator.of(dialogCtx).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Saved as new script: "$title"'),
+                      backgroundColor: AppTheme.success,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Save as New'),
+            ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
@@ -439,8 +520,9 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
             onPressed: () {
               final title = titleController.text.trim();
               if (title.isNotEmpty) {
-                final newScript = SavedScript(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                final scriptToSave = SavedScript(
+                  id: activeScript?.id ??
+                      DateTime.now().millisecondsSinceEpoch.toString(),
                   title: title,
                   content: _scriptController.text,
                   scrollSpeedWpm: state.prompterConfig.scrollSpeedWpm,
@@ -448,19 +530,24 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                   updatedAt: DateTime.now(),
                 );
                 context.read<ReceiverBloc>().add(
-                  ReceiverPrompterScriptSaved(newScript),
-                );
+                      ReceiverPrompterScriptSaved(scriptToSave),
+                    );
+                _applyScript();
                 Navigator.of(dialogCtx).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Saved "$title" to Script Library!'),
+                    content: Text(
+                      activeScript != null
+                          ? 'Updated "$title"!'
+                          : 'Saved "$title" to Script Library!',
+                    ),
                     backgroundColor: AppTheme.success,
                     duration: const Duration(seconds: 2),
                   ),
                 );
               }
             },
-            child: const Text('Save Script'),
+            child: Text(activeScript != null ? 'Update' : 'Save Script'),
           ),
         ],
       ),
@@ -473,9 +560,10 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const Text(
-              'LIVE SCRIPT CONTENT',
+              'TELEPROMPTER SCRIPT',
               style: TextStyle(
                 color: Colors.white60,
                 fontSize: 11,
@@ -483,114 +571,179 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                 letterSpacing: 0.8,
               ),
             ),
-            Row(
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              alignment: WrapAlignment.end,
               children: [
+                NeumorphicButton(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  backgroundColor: Colors.white10,
+                  textColor: Colors.white70,
+                  borderRadius: 10,
+                  icon: Icons.note_add_rounded,
+                  onPressed: () {
+                    _scriptController.clear();
+                    _applyScript();
+                  },
+                  child: const Text('New', style: TextStyle(fontSize: 12)),
+                ),
+                NeumorphicButton(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  backgroundColor: const Color(0xFF21262D),
+                  textColor: Colors.white,
+                  borderRadius: 10,
+                  icon: Icons.bookmark_add_rounded,
+                  onPressed: () => _showSaveScriptDialog(context, state),
+                  child: const Text('Save', style: TextStyle(fontSize: 12)),
+                ),
                 NeumorphicButton(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 6,
                   ),
-                  backgroundColor: Colors.white10,
-                  textColor: Colors.white70,
-                  borderRadius: 12,
-                  icon: Icons.bookmark_add_rounded,
-                  onPressed: () => _showSaveScriptDialog(context, state),
-                  child: const Text('Save Script'),
-                ),
-                const SizedBox(width: 8),
-                NeumorphicButton(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 6,
-                  ),
                   backgroundColor: AppTheme.primary,
                   textColor: Colors.white,
-                  borderRadius: 12,
-                  icon: Icons.send_rounded,
-                  onPressed: _pushScript,
-                  child: const Text('Push to Talent'),
+                  borderRadius: 10,
+                  icon: Icons.check_rounded,
+                  onPressed: () {
+                    _applyScript(showFeedback: true);
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
           ],
         ),
-        if (state.savedScripts.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 36,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: state.savedScripts.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final script = state.savedScripts[index];
-                final isSelected = script.id == state.activeScriptId;
+        const SizedBox(height: 12),
+        // Script library carousel
+        SizedBox(
+          height: 36,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: state.savedScripts.length + 1,
+            separatorBuilder: (context, index) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                // "+ New Script" button
                 return InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () {
-                    context.read<ReceiverBloc>().add(
-                      ReceiverPrompterScriptSelected(script),
-                    );
-                    _scriptController.text = script.content;
-                    setState(() => _isEditing = false);
+                    _scriptController.clear();
+                    _applyScript();
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
+                      horizontal: 10,
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppTheme.primary.withValues(alpha: 0.25)
-                          : const Color(0xFF1F2937),
+                      color: Colors.white.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isSelected ? AppTheme.primary : Colors.white12,
-                        width: isSelected ? 1.5 : 1,
+                        color: Colors.white24,
                       ),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.description_rounded,
-                          size: 14,
-                          color: isSelected ? AppTheme.primary : Colors.white60,
+                          Icons.add_rounded,
+                          size: 15,
+                          color: AppTheme.accent,
                         ),
-                        const SizedBox(width: 6),
+                        SizedBox(width: 4),
                         Text(
-                          script.title,
+                          'New',
                           style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.white70,
+                            color: Colors.white70,
                             fontSize: 12,
-                            fontWeight: isSelected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        if (isSelected) ...[
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () {
-                              context.read<ReceiverBloc>().add(
-                                ReceiverPrompterScriptDeleted(script.id),
-                              );
-                            },
-                            child: const Icon(
-                              Icons.close_rounded,
-                              size: 14,
-                              color: Colors.white54,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
                 );
-              },
-            ),
+              }
+
+              final script = state.savedScripts[index - 1];
+              final isSelected = script.id == state.activeScriptId;
+              return InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  context.read<ReceiverBloc>().add(
+                        ReceiverPrompterScriptSelected(script),
+                      );
+                  _scriptController.text = script.content;
+                  setState(() => _isEditing = false);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppTheme.primary.withValues(alpha: 0.25)
+                        : const Color(0xFF1F2937),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? AppTheme.primary : Colors.white12,
+                      width: isSelected ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.description_rounded,
+                        size: 14,
+                        color: isSelected ? AppTheme.primary : Colors.white60,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        script.title,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.white70,
+                          fontSize: 12,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      if (isSelected) ...[
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () {
+                            context.read<ReceiverBloc>().add(
+                                  ReceiverPrompterScriptDeleted(script.id),
+                                );
+                          },
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 14,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
-        ],
+        ),
         const SizedBox(height: 10),
         TextField(
           controller: _scriptController,
@@ -603,8 +756,9 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
           onChanged: (text) {
             if (!_isEditing) setState(() => _isEditing = true);
             context.read<ReceiverBloc>().add(
-              ReceiverPrompterScriptDispatched(text),
-            );
+                  ReceiverPrompterScriptDispatched(text),
+                );
+            setState(() {});
           },
           decoration: InputDecoration(
             hintText: 'Type or edit teleprompter script...',
@@ -619,6 +773,30 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
               borderRadius: BorderRadius.circular(16),
               borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
             ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 8, left: 4, right: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$_wordCount words',
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                'Est. read time: ${_formatEstReadTime(state.prompterConfig.scrollSpeedWpm)} (${state.prompterConfig.scrollSpeedWpm.round()} WPM)',
+                style: const TextStyle(
+                  color: AppTheme.accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
       ],

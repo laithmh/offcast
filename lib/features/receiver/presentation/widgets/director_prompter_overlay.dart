@@ -284,9 +284,6 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
                     isPlaying ? 'pause' : 'play',
                   ),
                 ),
-                onSwitchCamera: () => bloc.add(
-                  const ReceiverPrompterCommandDispatched('switch_camera'),
-                ),
                 onToggleBackground: () => setState(
                   () => _isTransparentBackground = !_isTransparentBackground,
                 ),
