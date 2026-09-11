@@ -19,6 +19,9 @@ class MediaProjectionService : Service() {
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
         var onStopListener: (() -> Unit)? = null
+        @Volatile
+        var isServiceForegroundStarted = false
+        var onServiceStartedListener: (() -> Unit)? = null
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -55,22 +58,29 @@ class MediaProjectionService : Service() {
                     .build()
 
                 try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        val fgsType = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-                        startForeground(NOTIFICATION_ID, notification, fgsType)
-                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        startForeground(
+                            NOTIFICATION_ID,
+                            notification,
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                        )
                     } else {
                         startForeground(NOTIFICATION_ID, notification)
                     }
+                    isServiceForegroundStarted = true
+                    android.util.Log.i("MediaProjectionService", "Foreground service started with MEDIA_PROJECTION type")
+                    onServiceStartedListener?.invoke()
                 } catch (e: Exception) {
                     android.util.Log.e("MediaProjectionService", "Error in startForeground: ${e.message}")
                     try {
                         startForeground(NOTIFICATION_ID, notification)
                     } catch (_: Exception) {}
+                    isServiceForegroundStarted = true
+                    onServiceStartedListener?.invoke()
                 }
             }
             ACTION_STOP -> {
+                isServiceForegroundStarted = false
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 } else {
@@ -85,6 +95,7 @@ class MediaProjectionService : Service() {
     }
 
     override fun onDestroy() {
+        isServiceForegroundStarted = false
         onStopListener?.invoke()
         super.onDestroy()
     }

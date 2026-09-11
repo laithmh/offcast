@@ -58,15 +58,42 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "startService" -> {
                         try {
+                            if (MediaProjectionService.isServiceForegroundStarted) {
+                                result.success(true)
+                                return@setMethodCallHandler
+                            }
+
                             val intent = Intent(this@MainActivity, MediaProjectionService::class.java).apply {
                                 action = MediaProjectionService.ACTION_START
                             }
+
+                            var replied = false
+                            val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                            val timeoutRunnable = Runnable {
+                                if (!replied) {
+                                    replied = true
+                                    MediaProjectionService.onServiceStartedListener = null
+                                    result.success(true)
+                                }
+                            }
+                            handler.postDelayed(timeoutRunnable, 1500)
+
+                            MediaProjectionService.onServiceStartedListener = {
+                                handler.removeCallbacks(timeoutRunnable)
+                                if (!replied) {
+                                    replied = true
+                                    MediaProjectionService.onServiceStartedListener = null
+                                    runOnUiThread {
+                                        result.success(true)
+                                    }
+                                }
+                            }
+
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 startForegroundService(intent)
                             } else {
                                 startService(intent)
                             }
-                            result.success(true)
                         } catch (e: Exception) {
                             result.error("START_FAILED", e.localizedMessage, null)
                         }

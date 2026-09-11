@@ -88,16 +88,37 @@ class SenderWebRTCService {
           throw Exception('User cancelled screen capture permission.');
         }
         await ForegroundServiceHelper.startService();
+        // Give Android 14 MediaProjectionManager system service 200ms to register active FGS token
+        await Future<void>.delayed(const Duration(milliseconds: 200));
       }
       try {
         _localStream = await navigator.mediaDevices.getDisplayMedia(
           WebRTCConstants.getDisplayMediaConstraints(preset: preset),
         );
       } catch (e) {
-        if (Platform.isAndroid) {
-          await ForegroundServiceHelper.stopService();
+        final errLower = e.toString().toLowerCase();
+        if (Platform.isAndroid &&
+            (errLower.contains('foreground service') ||
+             errLower.contains('media projection') ||
+             errLower.contains('securityexception'))) {
+          debugPrint(
+            '[SenderWebRTC] Transient Android MediaProjection timing glitch ($e). Retrying after 350ms...',
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+          try {
+            _localStream = await navigator.mediaDevices.getDisplayMedia(
+              WebRTCConstants.getDisplayMediaConstraints(preset: preset),
+            );
+          } catch (retryErr) {
+            await ForegroundServiceHelper.stopService();
+            rethrow;
+          }
+        } else {
+          if (Platform.isAndroid) {
+            await ForegroundServiceHelper.stopService();
+          }
+          rethrow;
         }
-        rethrow;
       }
 
       final videoTracks = _localStream?.getVideoTracks() ?? [];
