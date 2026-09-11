@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import '../../../core/constants/webrtc_constants.dart';
 import '../../../core/models/prompter_model.dart';
+import '../../../core/models/saved_script_model.dart';
 import 'receiver_state.dart';
 
 abstract class ReceiverEvent extends Equatable {
@@ -133,6 +134,46 @@ class ReceiverStreamSourceChanged extends ReceiverEvent {
 
 class ReceiverRegeneratePinRequested extends ReceiverEvent {
   const ReceiverRegeneratePinRequested();
+}
+
+class ReceiverPrompterStorageInitialized extends ReceiverEvent {
+  final PrompterConfig activeConfig;
+  final List<SavedScript> savedScripts;
+
+  const ReceiverPrompterStorageInitialized({
+    required this.activeConfig,
+    required this.savedScripts,
+  });
+
+  @override
+  List<Object?> get props => [activeConfig, savedScripts];
+}
+
+class ReceiverPrompterScriptSaved extends ReceiverEvent {
+  final SavedScript script;
+
+  const ReceiverPrompterScriptSaved(this.script);
+
+  @override
+  List<Object?> get props => [script];
+}
+
+class ReceiverPrompterScriptSelected extends ReceiverEvent {
+  final SavedScript script;
+
+  const ReceiverPrompterScriptSelected(this.script);
+
+  @override
+  List<Object?> get props => [script];
+}
+
+class ReceiverPrompterScriptDeleted extends ReceiverEvent {
+  final String scriptId;
+
+  const ReceiverPrompterScriptDeleted(this.scriptId);
+
+  @override
+  List<Object?> get props => [scriptId];
 }
 
 class ReceiverPinSecurityToggled extends ReceiverEvent {

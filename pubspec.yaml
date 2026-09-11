@@ -1,5 +1,5 @@
 name: hotspot_screen_sharing
-description: "OffCast - Ultra-Low Latency Offline P2P Screen Mirroring & Studio Camera Monitor"
+description: "OffCast - Ultra-Low Latency Offline Director Monitor & Teleprompter for Mobile Video Creators"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -44,6 +44,9 @@ dependencies:
   shelf_web_socket: ^3.0.0
   web_socket_channel: ^3.0.2
   permission_handler: ^11.4.0
+
+  # Offline Persistence
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:

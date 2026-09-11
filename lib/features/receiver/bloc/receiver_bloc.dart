@@ -4,9 +4,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../core/constants/webrtc_constants.dart';
 import '../../../core/network/discovery_beacon.dart';
 import '../../../core/services/foreground_service_helper.dart';
+import '../../../core/services/prompter_storage_service.dart';
 import '../data/embedded_signaling_server.dart';
 import '../data/receiver_webrtc_service.dart';
 import 'receiver_event.dart';
@@ -15,6 +15,7 @@ import 'receiver_state.dart';
 class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
   final EmbeddedSignalingServer signalingServer;
   final ReceiverWebRTCService webrtcService;
+  final PrompterStorageService storageService;
   final DiscoveryBroadcaster _discoveryBroadcaster = DiscoveryBroadcaster();
 
   StreamSubscription<bool>? _clientStatusSub;
@@ -24,8 +25,12 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
   Timer? _networkPollTimer;
   String _deviceName = 'Android Display';
 
-  ReceiverBloc({required this.signalingServer, required this.webrtcService})
-    : super(const ReceiverState()) {
+  ReceiverBloc({
+    required this.signalingServer,
+    required this.webrtcService,
+    PrompterStorageService? storageService,
+  })  : storageService = storageService ?? PrompterStorageService(),
+        super(const ReceiverState()) {
     on<ReceiverStartServerRequested>(_onStartServer);
     on<ReceiverStopServerRequested>(_onStopServer);
     on<ReceiverClientStatusChanged>(_onClientStatusChanged);
@@ -43,6 +48,12 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     on<ReceiverStreamSourceChanged>(_onStreamSourceChanged);
     on<ReceiverRegeneratePinRequested>(_onRegeneratePin);
     on<ReceiverPinSecurityToggled>(_onPinSecurityToggled);
+    on<ReceiverPrompterStorageInitialized>(_onStorageInitialized);
+    on<ReceiverPrompterScriptSaved>(_onScriptSaved);
+    on<ReceiverPrompterScriptSelected>(_onScriptSelected);
+    on<ReceiverPrompterScriptDeleted>(_onScriptDeleted);
+
+    _initStorage();
 
     _clientStatusSub = signalingServer.clientConnectionStatus.listen((
       connected,
@@ -422,13 +433,88 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     Emitter<ReceiverState> emit,
   ) {
     webrtcService.sendPrompterScriptUpdate(event.scriptText);
+    final newConfig = state.prompterConfig.copyWith(
+      scriptText: event.scriptText,
+      scrollProgress: 0.0,
+    );
+    storageService.saveActiveConfig(newConfig);
     emit(
       state.copyWith(
         isPrompterOverlayVisible: true,
-        prompterConfig: state.prompterConfig.copyWith(
-          scriptText: event.scriptText,
-          scrollProgress: 0.0,
-        ),
+        prompterConfig: newConfig,
+      ),
+    );
+  }
+
+  Future<void> _initStorage() async {
+    try {
+      final active = await storageService.loadActiveConfig();
+      final scripts = await storageService.loadSavedScripts();
+      add(ReceiverPrompterStorageInitialized(
+        activeConfig: active,
+        savedScripts: scripts,
+      ));
+    } catch (_) {}
+  }
+
+  void _onStorageInitialized(
+    ReceiverPrompterStorageInitialized event,
+    Emitter<ReceiverState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        prompterConfig: event.activeConfig,
+        savedScripts: event.savedScripts,
+      ),
+    );
+  }
+
+  Future<void> _onScriptSaved(
+    ReceiverPrompterScriptSaved event,
+    Emitter<ReceiverState> emit,
+  ) async {
+    final updated = await storageService.saveScript(event.script);
+    emit(
+      state.copyWith(
+        savedScripts: updated,
+        activeScriptId: event.script.id,
+      ),
+    );
+  }
+
+  void _onScriptSelected(
+    ReceiverPrompterScriptSelected event,
+    Emitter<ReceiverState> emit,
+  ) {
+    final updatedConfig = state.prompterConfig.copyWith(
+      scriptText: event.script.content,
+      scrollSpeedWpm: event.script.scrollSpeedWpm,
+      fontSize: event.script.fontSize,
+      scrollProgress: 0.0,
+      isPlaying: false,
+    );
+    webrtcService.sendPrompterScriptUpdate(event.script.content);
+    webrtcService.sendPrompterCommand('set_speed', {'speedWpm': event.script.scrollSpeedWpm});
+    webrtcService.sendPrompterCommand('set_font_size', {'fontSize': event.script.fontSize});
+    storageService.saveActiveConfig(updatedConfig);
+    emit(
+      state.copyWith(
+        prompterConfig: updatedConfig,
+        activeScriptId: event.script.id,
+        isPrompterOverlayVisible: true,
+      ),
+    );
+  }
+
+  Future<void> _onScriptDeleted(
+    ReceiverPrompterScriptDeleted event,
+    Emitter<ReceiverState> emit,
+  ) async {
+    final updated = await storageService.deleteScript(event.scriptId);
+    emit(
+      state.copyWith(
+        savedScripts: updated,
+        activeScriptId: state.activeScriptId == event.scriptId ? null : state.activeScriptId,
       ),
     );
   }
@@ -437,16 +523,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     ReceiverStreamSourceChanged event,
     Emitter<ReceiverState> emit,
   ) {
-    emit(
-      state.copyWith(
-        streamSource: event.streamSource,
-        // In screen mirror mode, immediately ensure the teleprompter overlay is hidden
-        isPrompterOverlayVisible:
-            event.streamSource == StreamSourceType.studioCamera
-            ? state.isPrompterOverlayVisible
-            : false,
-      ),
-    );
+    emit(state.copyWith(streamSource: event.streamSource));
   }
 
   @override

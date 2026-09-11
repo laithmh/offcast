@@ -73,11 +73,9 @@ class QualityPresetCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          preset == StreamingQualityPreset.ultra1080p30
+                          preset == StreamingQualityPreset.hd720p30
                               ? Icons.hd_rounded
-                              : (preset == StreamingQualityPreset.balanced720p60
-                                    ? Icons.high_quality_rounded
-                                    : Icons.speed_rounded),
+                              : Icons.bolt_rounded,
                           color: isSelected
                               ? AppTheme.primary
                               : AppTheme.textMuted,

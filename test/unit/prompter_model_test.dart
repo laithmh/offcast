@@ -115,35 +115,34 @@ void main() {
     );
   });
 
-  group('Camera Stream & Facing Modes Tests', () {
-    test('StreamSourceType and CameraFacingMode definitions', () {
+  group('Stream Configuration Tests', () {
+    test('StreamSourceType definitions', () {
       expect(StreamSourceType.screen.label, 'Screen Mirroring');
-      expect(StreamSourceType.studioCamera.label, 'Direct Studio Camera');
-      expect(CameraFacingMode.environment.label, 'Rear Camera (Studio)');
-      expect(CameraFacingMode.user.label, 'Front Camera (Selfie)');
     });
 
     test(
-      'WebRTCConstants.getCameraMediaConstraints returns correct constraints',
+      'WebRTCConstants.getDisplayMediaConstraints returns correct constraints',
       () {
-        final backConstraints = WebRTCConstants.getCameraMediaConstraints(
-          preset: StreamingQualityPreset.ultra1080p30,
-          facing: CameraFacingMode.environment,
+        final hdConstraints = WebRTCConstants.getDisplayMediaConstraints(
+          preset: StreamingQualityPreset.hd720p30,
         );
 
-        final video = backConstraints['video'] as Map<String, dynamic>;
-        expect(video['facingMode'], 'environment');
+        final video = hdConstraints['video'] as Map<String, dynamic>;
         final mandatory = video['mandatory'] as Map<String, dynamic>;
-        expect(mandatory['minWidth'], 1280);
-        expect(mandatory['minHeight'], 720);
+        expect(mandatory['maxWidth'], 720);
+        expect(mandatory['maxHeight'], 1600);
+        expect(mandatory['minFrameRate'], 24);
         expect(mandatory['maxFrameRate'], 30);
 
-        final frontConstraints = WebRTCConstants.getCameraMediaConstraints(
-          preset: StreamingQualityPreset.balanced720p60,
-          facing: CameraFacingMode.user,
+        final coolConstraints = WebRTCConstants.getDisplayMediaConstraints(
+          preset: StreamingQualityPreset.cool540p30,
         );
-        final frontVideo = frontConstraints['video'] as Map<String, dynamic>;
-        expect(frontVideo['facingMode'], 'user');
+        final coolVideo = coolConstraints['video'] as Map<String, dynamic>;
+        final coolMandatory = coolVideo['mandatory'] as Map<String, dynamic>;
+        expect(coolMandatory['maxWidth'], 540);
+        expect(coolMandatory['maxHeight'], 1200);
+        expect(coolMandatory['minFrameRate'], 24);
+        expect(coolMandatory['maxFrameRate'], 30);
       },
     );
   });

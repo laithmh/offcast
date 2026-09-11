@@ -63,7 +63,7 @@ class ReceiverTopBar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Display Viewfinder',
+                  'Director Monitor',
                   style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w800,

@@ -3,8 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/constants/webrtc_constants.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../bloc/sender_bloc.dart';
-import '../../bloc/sender_event.dart';
 import '../../bloc/sender_state.dart';
 import '../../data/sender_webrtc_service.dart';
 
@@ -23,7 +21,6 @@ class ConnectedSenderView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final webrtcService = context.read<SenderWebRTCService>();
-    final isCamera = state.streamSource == StreamSourceType.studioCamera;
 
     return Scaffold(
       backgroundColor: const Color(0xFF07090E), // Deep OLED black
@@ -64,11 +61,9 @@ class ConnectedSenderView extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            isCamera
-                                ? 'CAMERA TRANSMITTER ACTIVE'
-                                : 'SCREEN MIRRORING ACTIVE',
-                            style: const TextStyle(
+                          const Text(
+                            'SCREEN MIRRORING ACTIVE',
+                            style: TextStyle(
                               color: AppTheme.success,
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
@@ -98,20 +93,16 @@ class ConnectedSenderView extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        Icon(
-                          isCamera
-                              ? Icons.videocam_rounded
-                              : Icons.screen_share_rounded,
+                        const Icon(
+                          Icons.screen_share_rounded,
                           color: AppTheme.primary,
                           size: 52,
                         ),
                         const SizedBox(height: 14),
-                        Text(
-                          isCamera
-                              ? 'Direct Studio Camera Feed'
-                              : 'Connected to Viewer Monitor',
+                        const Text(
+                          'Broadcasting Viewfinder',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -144,20 +135,6 @@ class ConnectedSenderView extends StatelessWidget {
                                   ? 'H.264 Turbo'
                                   : 'VP8 Safe',
                             ),
-                            if (isCamera)
-                              _buildSpecBadge(
-                                icon:
-                                    state.cameraFacing ==
-                                        CameraFacingMode.environment
-                                    ? Icons.camera_rear_rounded
-                                    : Icons.camera_front_rounded,
-                                text:
-                                    state.cameraFacing ==
-                                        CameraFacingMode.environment
-                                    ? 'Rear Sensor'
-                                    : 'Front Sensor',
-                                color: AppTheme.accent,
-                              ),
                           ],
                         ),
 
@@ -190,14 +167,14 @@ class ConnectedSenderView extends StatelessWidget {
                                       label: 'FPS',
                                       value: stats.fps > 0
                                           ? stats.fps.toStringAsFixed(0)
-                                          : '60',
+                                          : '30',
                                       color: AppTheme.primary,
                                     ),
                                     _buildGlanceablePill(
                                       label: 'Bitrate',
                                       value: stats.bitrateMbps > 0
                                           ? '${stats.bitrateMbps.toStringAsFixed(1)}M'
-                                          : '3.5M',
+                                          : '${(state.preset.bitrateKbps / 1000).toStringAsFixed(1)}M',
                                       color: AppTheme.accent,
                                     ),
                                     _buildGlanceablePill(
@@ -213,16 +190,6 @@ class ConnectedSenderView extends StatelessWidget {
                                         value:
                                             '${phoneTemp.toStringAsFixed(0)}°C',
                                         color: tempColor,
-                                      ),
-                                    if (isCamera)
-                                      _buildGlanceablePill(
-                                        label: 'Camera',
-                                        value:
-                                            state.cameraFacing ==
-                                                CameraFacingMode.environment
-                                            ? 'Rear'
-                                            : 'Front',
-                                        color: AppTheme.accent,
                                       ),
                                   ],
                                 ),
@@ -254,7 +221,7 @@ class ConnectedSenderView extends StatelessWidget {
                                         ),
                                         SizedBox(width: 4),
                                         Text(
-                                          'Device temperature is high. Consider 720p preset.',
+                                          'Device temperature is high. Consider Cool 540p preset.',
                                           style: TextStyle(
                                             color: AppTheme.error,
                                             fontSize: 10,
@@ -274,97 +241,48 @@ class ConnectedSenderView extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
 
-                  // Actions: Flip Camera & Disconnect
-                  Row(
-                    children: [
-                      if (isCamera) ...[
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1E293B),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: const BorderSide(color: Colors.white12),
-                              ),
-                            ),
-                            icon: Icon(
-                              state.cameraFacing == CameraFacingMode.environment
-                                  ? Icons.camera_front_rounded
-                                  : Icons.camera_rear_rounded,
-                              size: 20,
-                              color: AppTheme.accent,
-                            ),
-                            label: Text(
-                              state.cameraFacing == CameraFacingMode.environment
-                                  ? 'Switch to Front'
-                                  : 'Switch to Rear',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            onPressed: () => context.read<SenderBloc>().add(
-                              const SenderCameraFacingToggled(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.error.withValues(
-                              alpha: 0.9,
-                            ),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          icon: const Icon(Icons.stop_rounded, size: 20),
-                          label: const Text(
-                            'Disconnect',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          onPressed: onDisconnect,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Optional Talent Prompter Glass toggle
-                  if (isCamera)
-                    Center(
-                      child: TextButton.icon(
-                        icon: Icon(
-                          state.isPrompterOverlay
-                              ? Icons.visibility_off_rounded
-                              : Icons.subtitles_rounded,
-                          size: 18,
-                          color: state.isPrompterOverlay
-                              ? AppTheme.accent
-                              : Colors.white60,
-                        ),
-                        label: Text(
-                          state.isPrompterOverlay
-                              ? 'Hide Teleprompter overlay'
-                              : 'Show Teleprompter on this display',
-                          style: TextStyle(
-                            color: state.isPrompterOverlay
-                                ? AppTheme.accent
-                                : Colors.white70,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        onPressed: () => context.read<SenderBloc>().add(
-                          const SenderPrompterOverlayToggled(),
-                        ),
+                  // Actions: Stop Broadcast
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.error.withValues(alpha: 0.9),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
+                    icon: const Icon(Icons.stop_rounded, size: 20),
+                    label: const Text(
+                      'Stop Broadcast',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    onPressed: onDisconnect,
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.tips_and_updates_rounded,
+                          color: AppTheme.accent,
+                          size: 18,
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Tip: Dim screen to keep phone cool. Set hotspot to 5 GHz band for 2–5ms ultra-low latency.',
+                            style: TextStyle(color: Colors.white60, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),

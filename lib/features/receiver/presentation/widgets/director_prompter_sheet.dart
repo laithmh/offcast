@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/models/saved_script_model.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/neumorphic_widgets.dart';
 import '../../bloc/receiver_bloc.dart';
@@ -151,7 +152,7 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                           const SizedBox(height: 20),
 
                           // Live Script Editor Section
-                          _buildScriptEditorSection(),
+                          _buildScriptEditorSection(state),
                         ],
                       ),
                     ),
@@ -377,9 +378,98 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
     );
   }
 
-  Widget _buildScriptEditorSection() {
+  void _showSaveScriptDialog(BuildContext context, ReceiverState state) {
+    final titleController = TextEditingController(
+      text: 'Script ${state.savedScripts.length + 1}',
+    );
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Save to Script Library',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter a title for this script:',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: titleController,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFF0D1117),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white24),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () {
+              final title = titleController.text.trim();
+              if (title.isNotEmpty) {
+                final newScript = SavedScript(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  title: title,
+                  content: _scriptController.text,
+                  scrollSpeedWpm: state.prompterConfig.scrollSpeedWpm,
+                  fontSize: state.prompterConfig.fontSize,
+                  updatedAt: DateTime.now(),
+                );
+                context.read<ReceiverBloc>().add(
+                  ReceiverPrompterScriptSaved(newScript),
+                );
+                Navigator.of(dialogCtx).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Saved "$title" to Script Library!'),
+                    backgroundColor: AppTheme.success,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            child: const Text('Save Script'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScriptEditorSection(ReceiverState state) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -393,17 +483,114 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                 letterSpacing: 0.8,
               ),
             ),
-            NeumorphicButton(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              backgroundColor: AppTheme.primary,
-              textColor: Colors.white,
-              borderRadius: 12,
-              icon: Icons.send_rounded,
-              onPressed: _pushScript,
-              child: const Text('Push to Talent'),
+            Row(
+              children: [
+                NeumorphicButton(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  backgroundColor: Colors.white10,
+                  textColor: Colors.white70,
+                  borderRadius: 12,
+                  icon: Icons.bookmark_add_rounded,
+                  onPressed: () => _showSaveScriptDialog(context, state),
+                  child: const Text('Save Script'),
+                ),
+                const SizedBox(width: 8),
+                NeumorphicButton(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  backgroundColor: AppTheme.primary,
+                  textColor: Colors.white,
+                  borderRadius: 12,
+                  icon: Icons.send_rounded,
+                  onPressed: _pushScript,
+                  child: const Text('Push to Talent'),
+                ),
+              ],
             ),
           ],
         ),
+        if (state.savedScripts.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: state.savedScripts.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final script = state.savedScripts[index];
+                final isSelected = script.id == state.activeScriptId;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    context.read<ReceiverBloc>().add(
+                      ReceiverPrompterScriptSelected(script),
+                    );
+                    _scriptController.text = script.content;
+                    setState(() => _isEditing = false);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.primary.withValues(alpha: 0.25)
+                          : const Color(0xFF1F2937),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? AppTheme.primary : Colors.white12,
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.description_rounded,
+                          size: 14,
+                          color: isSelected ? AppTheme.primary : Colors.white60,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          script.title,
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.white70,
+                            fontSize: 12,
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
+                        ),
+                        if (isSelected) ...[
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () {
+                              context.read<ReceiverBloc>().add(
+                                ReceiverPrompterScriptDeleted(script.id),
+                              );
+                            },
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 14,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
         const SizedBox(height: 10),
         TextField(
           controller: _scriptController,

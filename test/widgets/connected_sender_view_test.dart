@@ -21,79 +21,11 @@ void main() {
       await senderBloc.close();
     });
 
-    testWidgets(
-      'renders camera transmitter view with full spec badges and controls',
-      (tester) async {
-        bool disconnected = false;
-
-        const cameraState = SenderState(
-          status: SenderConnectionState.streaming,
-          streamSource: StreamSourceType.studioCamera,
-          cameraFacing: CameraFacingMode.environment,
-          targetHost: '192.168.43.1',
-          targetPort: 8080,
-        );
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: RepositoryProvider<SenderWebRTCService>.value(
-              value: webrtcService,
-              child: BlocProvider<SenderBloc>.value(
-                value: senderBloc,
-                child: ConnectedSenderView(
-                  state: cameraState,
-                  onDisconnect: () => disconnected = true,
-                ),
-              ),
-            ),
-          ),
-        );
-
-        expect(find.text('CAMERA TRANSMITTER ACTIVE'), findsOneWidget);
-        expect(find.text('Direct Studio Camera Feed'), findsOneWidget);
-        expect(find.text('Target: 192.168.43.1:8080'), findsOneWidget);
-        expect(find.text('Rear Sensor'), findsOneWidget);
-        expect(find.text('Switch to Front'), findsOneWidget);
-        expect(find.text('Disconnect'), findsOneWidget);
-        expect(find.text('Show Teleprompter on this display'), findsOneWidget);
-
-        await tester.tap(find.text('Disconnect'));
-        await tester.pumpAndSettle();
-        expect(disconnected, isTrue);
-      },
-    );
-
-    testWidgets('renders front camera state correctly', (tester) async {
-      const frontState = SenderState(
-        status: SenderConnectionState.streaming,
-        streamSource: StreamSourceType.studioCamera,
-        cameraFacing: CameraFacingMode.user,
-        targetHost: '192.168.43.1',
-        targetPort: 8080,
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: RepositoryProvider<SenderWebRTCService>.value(
-            value: webrtcService,
-            child: BlocProvider<SenderBloc>.value(
-              value: senderBloc,
-              child: ConnectedSenderView(
-                state: frontState,
-                onDisconnect: () {},
-              ),
-            ),
-          ),
-        ),
-      );
-
-      expect(find.text('Front Sensor'), findsOneWidget);
-      expect(find.text('Switch to Rear'), findsOneWidget);
-    });
-
-    testWidgets('renders screen mirror view cleanly without camera controls', (
+    testWidgets('renders viewfinder broadcast view with clean telemetry and stop button', (
       tester,
     ) async {
+      bool stopped = false;
+
       const screenState = SenderState(
         status: SenderConnectionState.streaming,
         streamSource: StreamSourceType.screen,
@@ -109,7 +41,7 @@ void main() {
               value: senderBloc,
               child: ConnectedSenderView(
                 state: screenState,
-                onDisconnect: () {},
+                onDisconnect: () => stopped = true,
               ),
             ),
           ),
@@ -117,11 +49,24 @@ void main() {
       );
 
       expect(find.text('SCREEN MIRRORING ACTIVE'), findsOneWidget);
-      expect(find.text('Connected to Viewer Monitor'), findsOneWidget);
+      expect(find.text('Broadcasting Viewfinder'), findsOneWidget);
+      expect(find.text('Target: 192.168.43.1:8080'), findsOneWidget);
+      expect(find.text('Stop Broadcast'), findsOneWidget);
+      expect(
+        find.text(
+          'Tip: Dim screen to keep phone cool. Set hotspot to 5 GHz band for 2–5ms ultra-low latency.',
+        ),
+        findsOneWidget,
+      );
+
+      // Camera-specific legacy controls must be absent
       expect(find.text('Switch to Front'), findsNothing);
       expect(find.text('Switch to Rear'), findsNothing);
       expect(find.text('Show Teleprompter on this display'), findsNothing);
-      expect(find.text('Disconnect'), findsOneWidget);
+
+      await tester.tap(find.text('Stop Broadcast'));
+      await tester.pumpAndSettle();
+      expect(stopped, isTrue);
     });
   });
 }

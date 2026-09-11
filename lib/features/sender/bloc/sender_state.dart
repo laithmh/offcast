@@ -17,7 +17,6 @@ class SenderState extends Equatable {
   final StreamingQualityPreset preset;
   final CodecEngine codecEngine;
   final StreamSourceType streamSource;
-  final CameraFacingMode cameraFacing;
   final PrompterConfig prompterConfig;
   final bool isPrompterOverlay;
   final String pairingPin;
@@ -32,10 +31,9 @@ class SenderState extends Equatable {
     this.isScanning = false,
     this.isVerified = false,
     this.clientIp,
-    this.preset = StreamingQualityPreset.performance540p60,
-    this.codecEngine = CodecEngine.vp8,
-    this.streamSource = StreamSourceType.studioCamera,
-    this.cameraFacing = CameraFacingMode.environment,
+    this.preset = StreamingQualityPreset.cool540p30,
+    this.codecEngine = CodecEngine.h264,
+    this.streamSource = StreamSourceType.screen,
     this.prompterConfig = const PrompterConfig(),
     this.isPrompterOverlay = false,
     this.pairingPin = '',
@@ -61,7 +59,6 @@ class SenderState extends Equatable {
     StreamingQualityPreset? preset,
     CodecEngine? codecEngine,
     StreamSourceType? streamSource,
-    CameraFacingMode? cameraFacing,
     PrompterConfig? prompterConfig,
     bool? isPrompterOverlay,
     String? pairingPin,
@@ -79,7 +76,6 @@ class SenderState extends Equatable {
       preset: preset ?? this.preset,
       codecEngine: codecEngine ?? this.codecEngine,
       streamSource: streamSource ?? this.streamSource,
-      cameraFacing: cameraFacing ?? this.cameraFacing,
       prompterConfig: prompterConfig ?? this.prompterConfig,
       isPrompterOverlay: isPrompterOverlay ?? this.isPrompterOverlay,
       pairingPin: pairingPin ?? this.pairingPin,
@@ -100,7 +96,6 @@ class SenderState extends Equatable {
     preset,
     codecEngine,
     streamSource,
-    cameraFacing,
     prompterConfig,
     isPrompterOverlay,
     pairingPin,

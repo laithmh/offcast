@@ -120,12 +120,12 @@ void main() {
     });
 
     test('Verify quality preset constraint configurations', () {
-      final perfConstraints = WebRTCConstants.getDisplayMediaConstraints(
-        preset: StreamingQualityPreset.performance540p60,
+      final coolConstraints = WebRTCConstants.getDisplayMediaConstraints(
+        preset: StreamingQualityPreset.cool540p30,
       );
-      final mandatory = (perfConstraints['video'] as Map)['mandatory'] as Map;
+      final mandatory = (coolConstraints['video'] as Map)['mandatory'] as Map;
       expect(mandatory['maxWidth'], 540);
-      expect(mandatory['maxFrameRate'], 60);
+      expect(mandatory['maxFrameRate'], 30);
 
       const perfStats = StreamPerformanceStats(
         fps: 59.8,
@@ -223,6 +223,7 @@ void main() {
         expect(sanitizedH264, contains('m=video 9 UDP/TLS/RTP/SAVPF 102 98'));
         expect(sanitizedH264, contains('a=fmtp:102'));
         expect(sanitizedH264, contains('a=rtcp-fb:102 nack pli'));
+        expect(sanitizedH264, contains('a=playout-delay:0 0'));
       },
     );
 

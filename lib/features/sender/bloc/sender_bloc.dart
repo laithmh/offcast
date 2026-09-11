@@ -31,7 +31,6 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     on<SenderQualityPresetChanged>(_onQualityPresetChanged);
     on<SenderCodecEngineChanged>(_onCodecEngineChanged);
     on<SenderStreamSourceChanged>(_onStreamSourceChanged);
-    on<SenderCameraFacingToggled>(_onCameraFacingToggled);
     on<SenderPrompterScriptUpdated>(_onPrompterScriptUpdated);
     on<SenderPrompterSpeedChanged>(_onPrompterSpeedChanged);
     on<SenderPrompterFontSizeChanged>(_onPrompterFontSizeChanged);
@@ -208,15 +207,7 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     emit(state.copyWith(streamSource: event.streamSource));
   }
 
-  Future<void> _onCameraFacingToggled(
-    SenderCameraFacingToggled event,
-    Emitter<SenderState> emit,
-  ) async {
-    final success = await webrtcService.switchCamera();
-    if (success) {
-      emit(state.copyWith(cameraFacing: webrtcService.currentCameraFacing));
-    }
-  }
+
 
   void _onPrompterScriptUpdated(
     SenderPrompterScriptUpdated event,
@@ -394,14 +385,6 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
             );
           }
           break;
-        case 'switch_camera':
-          final success = await webrtcService.switchCamera();
-          if (success) {
-            emit(
-              state.copyWith(cameraFacing: webrtcService.currentCameraFacing),
-            );
-          }
-          break;
       }
     }
   }
@@ -422,7 +405,6 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
         preset: event.preset,
         codecEngine: event.codecEngine,
         streamSource: event.streamSource,
-        cameraFacing: event.cameraFacing,
         pairingPin: effectivePin,
         errorMessage: null,
       ),
@@ -434,7 +416,6 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
       preset: event.preset,
       codecEngine: event.codecEngine,
       streamSource: event.streamSource,
-      cameraFacing: event.cameraFacing,
       pairingPin: effectivePin.isNotEmpty ? effectivePin : null,
     );
   }

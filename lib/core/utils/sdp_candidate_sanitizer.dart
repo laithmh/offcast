@@ -213,7 +213,7 @@ class SdpCandidateSanitizer {
       if (sanitizedLine.startsWith('m=video ')) {
         filteredLines.add('b=AS:$bitrateKbps');
         filteredLines.add('b=TIAS:${bitrateKbps * 1000}');
-        filteredLines.add('a=playout-delay:0 15');
+        filteredLines.add('a=playout-delay:0 0');
         filteredLines.add('a=rtcp-fb:$primaryVp8 nack');
         filteredLines.add('a=rtcp-fb:$primaryVp8 nack pli');
         filteredLines.add('a=rtcp-fb:$primaryVp8 goog-remb');

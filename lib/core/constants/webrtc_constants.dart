@@ -4,24 +4,12 @@ enum StreamSourceType {
   screen(
     label: 'Screen Mirroring',
     description: 'Mirror phone display to monitor',
-  ),
-  studioCamera(
-    label: 'Direct Studio Camera',
-    description: 'Clean 1080p 60 FPS hardware camera feed with zero CPU load',
   );
 
   final String label;
   final String description;
 
   const StreamSourceType({required this.label, required this.description});
-}
-
-enum CameraFacingMode {
-  environment(label: 'Rear Camera (Studio)'),
-  user(label: 'Front Camera (Selfie)');
-
-  final String label;
-  const CameraFacingMode({required this.label});
 }
 
 enum CodecEngine {
@@ -42,29 +30,22 @@ enum CodecEngine {
 }
 
 enum StreamingQualityPreset {
-  performance540p60(
-    label: 'Smooth Viewfinder (540p 60 FPS - Recommended)',
-    description: 'Ultra-low latency & zero heat with buttery motion',
-    targetFps: 60,
+  cool540p30(
+    label: 'Cool Viewfinder (540p 30 FPS)',
+    description:
+        'Ultra-low heat & stable battery for long continuous shoots (Recommended)',
+    targetFps: 30,
     maxWidth: 540,
     maxHeight: 1200,
-    bitrateKbps: 1300,
+    bitrateKbps: 850,
   ),
-  balanced720p60(
-    label: 'Balanced Monitor (720p 45 FPS)',
-    description: 'Crisp 720p clarity with balanced battery and thermal load',
-    targetFps: 45,
+  hd720p30(
+    label: 'HD Viewfinder (720p 30 FPS)',
+    description: 'Crisp 720p clarity for framing and focus inspection',
+    targetFps: 30,
     maxWidth: 720,
     maxHeight: 1600,
-    bitrateKbps: 2200,
-  ),
-  ultra1080p30(
-    label: 'Studio Detail (1080p 30 FPS)',
-    description: 'Full HD 1080p detail for camera monitoring & static framing',
-    targetFps: 30,
-    maxWidth: 1080,
-    maxHeight: 2400,
-    bitrateKbps: 3200,
+    bitrateKbps: 1800,
   );
 
   final String label;
@@ -161,7 +142,7 @@ class WebRTCConstants {
 
   /// Screen capture constraints optimized for MediaTek & Qualcomm hardware encoders
   static Map<String, dynamic> getDisplayMediaConstraints({
-    StreamingQualityPreset preset = StreamingQualityPreset.balanced720p60,
+    StreamingQualityPreset preset = StreamingQualityPreset.cool540p30,
   }) {
     return {
       'audio': false,
@@ -169,9 +150,11 @@ class WebRTCConstants {
         'mandatory': {
           'maxWidth': preset.maxWidth,
           'maxHeight': preset.maxHeight,
+          'minFrameRate': 24,
           'maxFrameRate': preset.targetFps,
         },
         'optional': <dynamic>[
+          {'minFrameRate': 24},
           {'googCpuOveruseDetection': false},
           {'googCpuOveruseThreshold': 100},
           {'googHighpassFilter': false},
@@ -184,37 +167,6 @@ class WebRTCConstants {
   /// Default display media constraints
   static Map<String, dynamic> get displayMediaConstraints =>
       getDisplayMediaConstraints();
-
-  /// Hardware camera capture constraints (1080p/720p 60/45/30 FPS)
-  static Map<String, dynamic> getCameraMediaConstraints({
-    StreamingQualityPreset preset = StreamingQualityPreset.balanced720p60,
-    CameraFacingMode facing = CameraFacingMode.environment,
-  }) {
-    final isUltra = preset == StreamingQualityPreset.ultra1080p30;
-    final isPerformance = preset == StreamingQualityPreset.performance540p60;
-    final targetW = isUltra ? 1920 : (isPerformance ? 960 : 1280);
-    final targetH = isUltra ? 1080 : (isPerformance ? 540 : 720);
-    final isFront = facing == CameraFacingMode.user;
-
-    return {
-      'audio': false,
-      'video': {
-        'facingMode': isFront ? 'user' : 'environment',
-        'mandatory': {
-          'minWidth': isFront ? 640 : (isPerformance ? 960 : 1280),
-          'minHeight': isFront ? 480 : (isPerformance ? 540 : 720),
-          'maxWidth': targetW,
-          'maxHeight': targetH,
-          'maxFrameRate': preset.targetFps,
-        },
-        'optional': <dynamic>[
-          {'minFrameRate': 15},
-          {'googCpuOveruseDetection': false},
-          {'googCpuOveruseThreshold': 100},
-        ],
-      },
-    };
-  }
 
   /// SDP Offer constraints for Sender (Unified Plan)
   static const Map<String, dynamic> senderOfferConstraints = {

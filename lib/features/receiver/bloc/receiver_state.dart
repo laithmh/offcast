@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import '../../../core/constants/webrtc_constants.dart';
 import '../../../core/models/prompter_model.dart';
+import '../../../core/models/saved_script_model.dart';
 
 enum ReceiverStatus {
   initial,
@@ -25,6 +26,7 @@ enum SocialFramingMode {
 
   final String label;
   final String description;
+
   const SocialFramingMode({required this.label, required this.description});
 }
 
@@ -38,6 +40,8 @@ class ReceiverState extends Equatable {
   final SocialFramingMode framingMode;
   final StreamSourceType streamSource;
   final PrompterConfig prompterConfig;
+  final List<SavedScript> savedScripts;
+  final String? activeScriptId;
   final bool isDirectorPrompterOpen;
   final bool isPrompterOverlayVisible;
   final String pairingPin;
@@ -54,6 +58,8 @@ class ReceiverState extends Equatable {
     this.framingMode = SocialFramingMode.none,
     this.streamSource = StreamSourceType.screen,
     this.prompterConfig = const PrompterConfig(),
+    this.savedScripts = const [],
+    this.activeScriptId,
     this.isDirectorPrompterOpen = false,
     this.isPrompterOverlayVisible = false,
     this.pairingPin = '',
@@ -71,6 +77,8 @@ class ReceiverState extends Equatable {
     SocialFramingMode? framingMode,
     StreamSourceType? streamSource,
     PrompterConfig? prompterConfig,
+    List<SavedScript>? savedScripts,
+    String? activeScriptId,
     bool? isDirectorPrompterOpen,
     bool? isPrompterOverlayVisible,
     String? pairingPin,
@@ -87,6 +95,8 @@ class ReceiverState extends Equatable {
       framingMode: framingMode ?? this.framingMode,
       streamSource: streamSource ?? this.streamSource,
       prompterConfig: prompterConfig ?? this.prompterConfig,
+      savedScripts: savedScripts ?? this.savedScripts,
+      activeScriptId: activeScriptId ?? this.activeScriptId,
       isDirectorPrompterOpen:
           isDirectorPrompterOpen ?? this.isDirectorPrompterOpen,
       isPrompterOverlayVisible:
@@ -108,6 +118,8 @@ class ReceiverState extends Equatable {
     framingMode,
     streamSource,
     prompterConfig,
+    savedScripts,
+    activeScriptId,
     isDirectorPrompterOpen,
     isPrompterOverlayVisible,
     pairingPin,

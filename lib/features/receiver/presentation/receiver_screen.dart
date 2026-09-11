@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
-import '../../../core/constants/webrtc_constants.dart';
 import '../../../core/services/foreground_service_helper.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/exit_confirmation_dialog.dart';
@@ -227,9 +226,7 @@ class _ReceiverViewState extends State<_ReceiverView>
                     ),
 
                   // Live Draggable Director Prompter Monitor Layer
-                  if (state.isStreaming &&
-                      state.streamSource == StreamSourceType.studioCamera &&
-                      state.isPrompterOverlayVisible)
+                  if (state.isStreaming && state.isPrompterOverlayVisible)
                     _buildDraggablePrompter(state),
 
                   // Overlay Controls Layer

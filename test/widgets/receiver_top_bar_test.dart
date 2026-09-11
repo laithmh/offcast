@@ -85,7 +85,7 @@ void main() {
           ),
         );
 
-        expect(find.text('Display Viewfinder'), findsOneWidget);
+        expect(find.text('Director Monitor'), findsOneWidget);
         expect(find.text('ws://192.168.43.1:8080'), findsOneWidget);
         expect(find.text('Restart'), findsOneWidget);
         expect(find.byIcon(Icons.arrow_back_ios_new_rounded), findsOneWidget);

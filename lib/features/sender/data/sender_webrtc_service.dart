@@ -50,33 +50,29 @@ class SenderWebRTCService {
   bool _hasRemoteDescription = false;
   String? _currentTargetHost;
   StreamingQualityPreset _currentPreset =
-      StreamingQualityPreset.performance540p60;
-  CodecEngine _codecEngine = CodecEngine.vp8;
+      StreamingQualityPreset.cool540p30;
+  CodecEngine _codecEngine = CodecEngine.h264;
   StreamSourceType _currentStreamSource = StreamSourceType.screen;
-  CameraFacingMode _currentCameraFacing = CameraFacingMode.environment;
   Timer? _statsTimer;
   StreamSubscription<SignalingMessage>? _signalingSub;
   StreamSubscription<void>? _disconnectSub;
   StreamSubscription<String>? _signalingErrorSub;
 
   StreamSourceType get currentStreamSource => _currentStreamSource;
-  CameraFacingMode get currentCameraFacing => _currentCameraFacing;
 
-  /// Starts the ultra-low latency screen mirroring or direct studio camera stream
+  /// Starts the ultra-low latency screen mirroring stream
   Future<void> startMirroring({
     required String host,
     int port = WebRTCConstants.signalingPort,
-    StreamingQualityPreset preset = StreamingQualityPreset.performance540p60,
-    CodecEngine codecEngine = CodecEngine.vp8,
+    StreamingQualityPreset preset = StreamingQualityPreset.cool540p30,
+    CodecEngine codecEngine = CodecEngine.h264,
     StreamSourceType streamSource = StreamSourceType.screen,
-    CameraFacingMode cameraFacing = CameraFacingMode.environment,
     String? pairingPin,
   }) async {
     _currentTargetHost = host;
     _currentPreset = preset;
     _codecEngine = codecEngine;
     _currentStreamSource = streamSource;
-    _currentCameraFacing = cameraFacing;
     _iceCandidateQueue.clear();
     _hasRemoteDescription = false;
 
@@ -84,73 +80,29 @@ class SenderWebRTCService {
       // 1. Keep screen on
       await ForegroundServiceHelper.setKeepScreenOn(true);
 
-      // 2. Acquire Media with 3-tier camera fallback
-      if (streamSource == StreamSourceType.studioCamera) {
-        try {
-          _localStream = await navigator.mediaDevices.getUserMedia(
-            WebRTCConstants.getCameraMediaConstraints(
-              preset: preset,
-              facing: cameraFacing,
-            ),
-          );
-        } catch (camErr) {
-          debugPrint(
-            '[SenderWebRTC] Primary camera constraints failed ($camErr). Retrying with safe 720p fallback...',
-          );
-          try {
-            _localStream = await navigator.mediaDevices.getUserMedia({
-              'audio': false,
-              'video': {
-                'facingMode':
-                    cameraFacing == CameraFacingMode.user ? 'user' : 'environment',
-                'mandatory': {
-                  'maxWidth': 1280,
-                  'maxHeight': 720,
-                  'maxFrameRate': 30,
-                },
-              },
-            });
-          } catch (fallbackErr) {
-            debugPrint(
-              '[SenderWebRTC] Safe constraints failed ($fallbackErr). Falling back to native basic camera...',
-            );
-            _localStream = await navigator.mediaDevices.getUserMedia({
-              'audio': false,
-              'video': {
-                'facingMode':
-                    cameraFacing == CameraFacingMode.user ? 'user' : 'environment',
-              },
-            });
-          }
+      // 2. Acquire Display Media
+      _stateController.add(SenderConnectionState.capturingScreen);
+      if (Platform.isAndroid) {
+        final granted = await Helper.requestCapturePermission();
+        if (!granted) {
+          throw Exception('User cancelled screen capture permission.');
         }
-      } else {
-        _stateController.add(SenderConnectionState.capturingScreen);
+        await ForegroundServiceHelper.startService();
+      }
+      try {
+        _localStream = await navigator.mediaDevices.getDisplayMedia(
+          WebRTCConstants.getDisplayMediaConstraints(preset: preset),
+        );
+      } catch (e) {
         if (Platform.isAndroid) {
-          final granted = await Helper.requestCapturePermission();
-          if (!granted) {
-            throw Exception('User cancelled screen capture permission.');
-          }
-          await ForegroundServiceHelper.startService();
+          await ForegroundServiceHelper.stopService();
         }
-        try {
-          _localStream = await navigator.mediaDevices.getDisplayMedia(
-            WebRTCConstants.getDisplayMediaConstraints(preset: preset),
-          );
-        } catch (e) {
-          if (Platform.isAndroid) {
-            await ForegroundServiceHelper.stopService();
-          }
-          rethrow;
-        }
+        rethrow;
       }
 
       final videoTracks = _localStream?.getVideoTracks() ?? [];
       if (videoTracks.isEmpty) {
-        throw Exception(
-          streamSource == StreamSourceType.studioCamera
-              ? 'No camera video track obtained.'
-              : 'No display video track obtained.',
-        );
+        throw Exception('No display video track obtained.');
       }
 
       // 3. Bind process to Wi-Fi network interface
@@ -279,13 +231,11 @@ class SenderWebRTCService {
           if (sender.track?.kind == 'video') {
             final parameters = sender.parameters;
             parameters.degradationPreference =
-                RTCDegradationPreference.BALANCED;
+                RTCDegradationPreference.MAINTAIN_FRAMERATE;
             if (parameters.encodings != null &&
                 parameters.encodings!.isNotEmpty) {
               final scaleDown =
-                  preset == StreamingQualityPreset.performance540p60
-                  ? 2.0
-                  : (preset == StreamingQualityPreset.ultra1080p30 ? 1.0 : 1.5);
+                  preset == StreamingQualityPreset.cool540p30 ? 2.0 : 1.5;
               for (final encoding in parameters.encodings!) {
                 encoding.minBitrate = (preset.bitrateKbps * 0.7).toInt() * 1000;
                 encoding.maxBitrate = preset.bitrateKbps * 1000;
@@ -392,16 +342,13 @@ class SenderWebRTCService {
                 if (sender.track?.kind == 'video') {
                   final parameters = sender.parameters;
                   parameters.degradationPreference =
-                      RTCDegradationPreference.BALANCED;
+                      RTCDegradationPreference.MAINTAIN_FRAMERATE;
                   if (parameters.encodings != null &&
                       parameters.encodings!.isNotEmpty) {
                     final scaleDown =
-                        _currentPreset ==
-                            StreamingQualityPreset.performance540p60
-                        ? 2.0
-                        : (_currentPreset == StreamingQualityPreset.ultra1080p30
-                              ? 1.0
-                              : 1.5);
+                        _currentPreset == StreamingQualityPreset.cool540p30
+                            ? 2.0
+                            : 1.5;
                     for (final encoding in parameters.encodings!) {
                       encoding.maxBitrate = _currentPreset.bitrateKbps * 1000;
                       encoding.minBitrate =
@@ -559,73 +506,7 @@ class SenderWebRTCService {
     }
   }
 
-  /// Seamlessly switches between back and front camera while streaming
-  Future<bool> switchCamera() async {
-    if (_currentStreamSource != StreamSourceType.studioCamera) {
-      return false;
-    }
 
-    final targetFacing = _currentCameraFacing == CameraFacingMode.environment
-        ? CameraFacingMode.user
-        : CameraFacingMode.environment;
-
-    // Strategy 1: Attempt native in-place capturer camera switch
-    if (_localStream != null) {
-      final videoTracks = _localStream!.getVideoTracks();
-      if (videoTracks.isNotEmpty) {
-        try {
-          final switched = await Helper.switchCamera(videoTracks.first);
-          if (switched != false) {
-            _currentCameraFacing = targetFacing;
-            return true;
-          }
-        } catch (_) {}
-      }
-    }
-
-    // Strategy 2: Fallback to re-acquiring target camera stream and replacing track
-    try {
-      final newStream = await navigator.mediaDevices.getUserMedia(
-        WebRTCConstants.getCameraMediaConstraints(
-          preset: _currentPreset,
-          facing: targetFacing,
-        ),
-      );
-      final newVideoTracks = newStream.getVideoTracks();
-      if (newVideoTracks.isEmpty) {
-        await newStream.dispose();
-        return false;
-      }
-      final newTrack = newVideoTracks.first;
-
-      if (_peerConnection != null) {
-        final senders = await _peerConnection!.getSenders();
-        for (final sender in senders) {
-          if (sender.track?.kind == 'video') {
-            await sender.replaceTrack(newTrack);
-          }
-        }
-      }
-
-      if (_localStream != null) {
-        for (final track in _localStream!.getVideoTracks()) {
-          try {
-            await track.stop();
-          } catch (_) {}
-        }
-        try {
-          await _localStream!.dispose();
-        } catch (_) {}
-      }
-
-      _localStream = newStream;
-      _currentCameraFacing = targetFacing;
-      return true;
-    } catch (e) {
-      _errorController.add('Failed to switch camera: $e');
-      return false;
-    }
-  }
 
   void sendPrompterState(Map<String, dynamic> state) {
     _signalingClient.send(SignalingMessage.prompterStateSync(state));

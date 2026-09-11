@@ -42,15 +42,11 @@ void main() {
 
       expect(find.text('Quality & Performance Preset'), findsOneWidget);
       expect(
-        find.text(StreamingQualityPreset.performance540p60.label),
+        find.text(StreamingQualityPreset.cool540p30.label),
         findsOneWidget,
       );
       expect(
-        find.text(StreamingQualityPreset.balanced720p60.label),
-        findsOneWidget,
-      );
-      expect(
-        find.text(StreamingQualityPreset.ultra1080p30.label),
+        find.text(StreamingQualityPreset.hd720p30.label),
         findsOneWidget,
       );
 
@@ -59,7 +55,7 @@ void main() {
       expect(find.text(CodecEngine.h264.label), findsOneWidget);
     });
 
-    testWidgets('tapping 1080p preset and H.264 updates bloc state', (
+    testWidgets('tapping 720p preset and VP8 updates bloc state', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -78,20 +74,20 @@ void main() {
         ),
       );
 
-      // Tap Ultra 1080p
-      await tester.tap(find.text(StreamingQualityPreset.ultra1080p30.label));
+      // Tap HD 720p
+      await tester.tap(find.text(StreamingQualityPreset.hd720p30.label));
       await tester.pumpAndSettle();
 
       expect(
         senderBloc.state.preset,
-        equals(StreamingQualityPreset.ultra1080p30),
+        equals(StreamingQualityPreset.hd720p30),
       );
 
-      // Tap Hardware Turbo H.264
-      await tester.tap(find.text(CodecEngine.h264.label));
+      // Tap VP8 Safe
+      await tester.tap(find.text(CodecEngine.vp8.label));
       await tester.pumpAndSettle();
 
-      expect(senderBloc.state.codecEngine, equals(CodecEngine.h264));
+      expect(senderBloc.state.codecEngine, equals(CodecEngine.vp8));
     });
   });
 }

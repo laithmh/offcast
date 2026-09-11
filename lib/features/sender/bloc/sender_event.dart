@@ -18,16 +18,14 @@ class SenderStartSharingRequested extends SenderEvent {
   final StreamingQualityPreset preset;
   final CodecEngine codecEngine;
   final StreamSourceType streamSource;
-  final CameraFacingMode cameraFacing;
   final String? pairingPin;
 
   const SenderStartSharingRequested({
     required this.targetHost,
     this.targetPort = 8080,
-    this.preset = StreamingQualityPreset.performance540p60,
-    this.codecEngine = CodecEngine.vp8,
+    this.preset = StreamingQualityPreset.cool540p30,
+    this.codecEngine = CodecEngine.h264,
     this.streamSource = StreamSourceType.screen,
-    this.cameraFacing = CameraFacingMode.environment,
     this.pairingPin,
   });
 
@@ -38,7 +36,6 @@ class SenderStartSharingRequested extends SenderEvent {
     preset,
     codecEngine,
     streamSource,
-    cameraFacing,
     pairingPin,
   ];
 }
@@ -145,10 +142,6 @@ class SenderStreamSourceChanged extends SenderEvent {
 
   @override
   List<Object?> get props => [streamSource];
-}
-
-class SenderCameraFacingToggled extends SenderEvent {
-  const SenderCameraFacingToggled();
 }
 
 class SenderPrompterScriptUpdated extends SenderEvent {

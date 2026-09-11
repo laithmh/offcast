@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../../../core/constants/webrtc_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/permission_helper.dart';
 import '../../../core/widgets/exit_confirmation_dialog.dart';
@@ -14,8 +13,6 @@ import '../data/sender_webrtc_service.dart';
 import 'widgets/connected_sender_view.dart';
 import 'widgets/manual_ip_override_card.dart';
 import 'widgets/quality_preset_card.dart';
-import 'widgets/stream_source_card.dart';
-import 'widgets/talent_prompter_view.dart';
 import 'widgets/target_host_card.dart';
 
 /// Entry screen for the Sender / Transmitter role.
@@ -139,17 +136,10 @@ class _SenderViewState extends State<_SenderView>
       return;
     }
 
-    if (bloc.state.streamSource == StreamSourceType.studioCamera) {
-      final camGranted = await PermissionHelper.requestCameraAndMicPermissions(
-        context,
-      );
-      if (!camGranted) return;
-    } else {
-      final notifStatus = await Permission.notification.status;
-      if (!notifStatus.isGranted && mounted) {
-        final granted = await PermissionHelper.requestPermissions(context);
-        if (!granted) return;
-      }
+    final notifStatus = await Permission.notification.status;
+    if (!notifStatus.isGranted && mounted) {
+      final granted = await PermissionHelper.requestPermissions(context);
+      if (!granted) return;
     }
 
     if (!mounted) return;
@@ -163,7 +153,6 @@ class _SenderViewState extends State<_SenderView>
         preset: bloc.state.preset,
         codecEngine: bloc.state.codecEngine,
         streamSource: bloc.state.streamSource,
-        cameraFacing: bloc.state.cameraFacing,
         pairingPin: effectivePin.isNotEmpty ? effectivePin : null,
       ),
     );
@@ -186,6 +175,12 @@ class _SenderViewState extends State<_SenderView>
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<SenderBloc, SenderState>(
+      listenWhen: (prev, curr) {
+        return prev.status != curr.status ||
+            prev.isAutoDiscovered != curr.isAutoDiscovered ||
+            prev.discoveredDevice != curr.discoveredDevice ||
+            prev.errorMessage != curr.errorMessage;
+      },
       listener: (context, state) {
         if (state.isAutoDiscovered || state.discoveredDevice != null) {
           _ipController.text = state.targetHost;
@@ -193,6 +188,35 @@ class _SenderViewState extends State<_SenderView>
           if (state.pairingPin.isNotEmpty && _pinController.text.isEmpty) {
             _pinController.text = state.pairingPin;
           }
+        }
+
+        if (state.status == SenderConnectionState.streaming) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Viewfinder active! Open your Camera app to shoot.',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppTheme.success,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
         }
 
         if (state.status == SenderConnectionState.failed &&
@@ -212,16 +236,7 @@ class _SenderViewState extends State<_SenderView>
       },
       builder: (context, state) {
         Widget content;
-        if (state.isStreaming &&
-            state.streamSource == StreamSourceType.studioCamera &&
-            state.isPrompterOverlay) {
-          content = TalentPrompterView(
-            config: state.prompterConfig,
-            onToggleHud: () => context.read<SenderBloc>().add(
-              const SenderPrompterOverlayToggled(),
-            ),
-          );
-        } else if (state.isStreaming) {
+        if (state.isStreaming) {
           content = ConnectedSenderView(
             state: state,
             onDisconnect: _stopSharing,
@@ -286,8 +301,6 @@ class _SenderViewState extends State<_SenderView>
                         _buildPermissionNotice(),
                       ],
                       const SizedBox(height: 20),
-                      StreamSourceCard(state: state),
-                      const SizedBox(height: 20),
                       TargetHostCard(
                         state: state,
                         scanPulseController: _scanPulseController,
@@ -322,7 +335,7 @@ class _SenderViewState extends State<_SenderView>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Camera & Screen Broadcast',
+          'Wireless Viewfinder Broadcast',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,
@@ -332,7 +345,7 @@ class _SenderViewState extends State<_SenderView>
         ),
         SizedBox(height: 4),
         Text(
-          'Transmit zero-latency video to the Director Monitor over direct Wi-Fi Hotspot.',
+          'Mirror your screen to the Director Monitor over direct Wi-Fi Hotspot with ultra-low latency.',
           style: TextStyle(
             fontSize: 13,
             color: AppTheme.textSecondary,
@@ -393,7 +406,6 @@ class _SenderViewState extends State<_SenderView>
 
   Widget _buildActionButtons(SenderState state) {
     final hasWifi = state.clientIp != null;
-    final isCamera = state.streamSource == StreamSourceType.studioCamera;
 
     return NeumorphicButton(
       onPressed: hasWifi
@@ -412,15 +424,11 @@ class _SenderViewState extends State<_SenderView>
       backgroundColor: hasWifi ? AppTheme.primary : AppTheme.surfaceElevated,
       textColor: hasWifi ? Colors.white : AppTheme.textMuted,
       borderRadius: 18,
-      icon: !hasWifi
-          ? Icons.wifi_off_rounded
-          : (isCamera ? Icons.videocam_rounded : Icons.play_arrow_rounded),
+      icon: !hasWifi ? Icons.wifi_off_rounded : Icons.play_arrow_rounded,
       child: Text(
         !hasWifi
             ? 'Connect to Hotspot to Stream'
-            : (isCamera
-                  ? 'Start Studio Camera & Prompter'
-                  : 'Start Screen Mirroring'),
+            : 'Start Viewfinder Broadcast',
       ),
     );
   }

@@ -148,7 +148,7 @@ class ReceiverWaitingView extends StatelessWidget {
                 Text(
                   !hasNetwork
                       ? 'Turn on Portable Hotspot in device settings. The screen will automatically start listening the moment it is turned on.'
-                      : 'Keep this screen open on your display device. On the casting device, tap Start Stream.',
+                      : 'Keep this monitor open. On your camera phone, tap Start Viewfinder to connect.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
@@ -356,6 +356,40 @@ class ReceiverWaitingView extends StatelessWidget {
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppTheme.primary.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.speed_rounded,
+                          color: AppTheme.primary,
+                          size: 18,
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '⚡ Pro Tip: Set Hotspot band to 5 GHz in Android Settings for 2–5ms ultra-low latency & zero stutter.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textPrimary,
+                              height: 1.35,
+                            ),
                           ),
                         ),
                       ],

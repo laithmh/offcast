@@ -36,11 +36,12 @@ void main() {
     });
 
     testWidgets(
-      'in screen mirror mode: hides camera switch and teleprompter buttons for clean UI',
+      'in viewfinder stream mode: renders display controls and teleprompter tools',
       (tester) async {
         const state = ReceiverState(
           isStreaming: true,
           streamSource: StreamSourceType.screen,
+          isPrompterOverlayVisible: false,
         );
 
         await tester.pumpWidget(
@@ -67,20 +68,21 @@ void main() {
         expect(find.byIcon(Icons.flip_rounded), findsOneWidget);
         expect(find.byIcon(Icons.aspect_ratio_rounded), findsOneWidget);
 
-        // Camera and teleprompter controls must be absent
+        // Prompter controls are available
+        expect(find.byIcon(Icons.subtitles_off_rounded), findsOneWidget);
+        expect(find.byIcon(Icons.edit_note_rounded), findsOneWidget);
+
+        // Camera switch button is absent
         expect(find.byIcon(Icons.cameraswitch_rounded), findsNothing);
-        expect(find.byIcon(Icons.subtitles_rounded), findsNothing);
-        expect(find.byIcon(Icons.subtitles_off_rounded), findsNothing);
-        expect(find.byIcon(Icons.edit_note_rounded), findsNothing);
       },
     );
 
     testWidgets(
-      'in studio camera mode: renders remote camera switch and teleprompter controls',
+      'when prompter overlay is visible: shows active prompter icon',
       (tester) async {
         const state = ReceiverState(
           isStreaming: true,
-          streamSource: StreamSourceType.studioCamera,
+          streamSource: StreamSourceType.screen,
           isPrompterOverlayVisible: true,
         );
 
@@ -102,7 +104,6 @@ void main() {
           ),
         );
 
-        expect(find.byIcon(Icons.cameraswitch_rounded), findsOneWidget);
         expect(find.byIcon(Icons.subtitles_rounded), findsOneWidget);
         expect(find.byIcon(Icons.edit_note_rounded), findsOneWidget);
       },
