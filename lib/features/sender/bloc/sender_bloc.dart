@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/models/signaling_message.dart';
 import '../../../core/network/discovery_beacon.dart';
+import '../../../core/services/foreground_service_helper.dart';
 import '../data/sender_webrtc_service.dart';
 import 'sender_event.dart';
 import 'sender_state.dart';
@@ -89,6 +90,7 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
   }
 
   Future<void> _initiateAutoDetection() async {
+    await ForegroundServiceHelper.bindToWifiNetwork();
     final clientIp = await NetworkHelper.getMyDeviceIp();
     if (clientIp != null && !isClosed) {
       add(SenderClientIpDetected(clientIp));

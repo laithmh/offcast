@@ -107,11 +107,35 @@ class SenderWebRTCService {
 
       // 3. Bind process to Wi-Fi network interface
       await ForegroundServiceHelper.bindToWifiNetwork();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
 
-      // 4. Connect to Receiver Signaling Server via WebSocket
+      // 4. Connect to Receiver Signaling Server via WebSocket with route retry
       _stateController.add(SenderConnectionState.connectingSignaling);
       _setupSignalingSubscriptions();
-      await _signalingClient.connect(host, port, pin: pairingPin);
+
+      int attempts = 0;
+      while (true) {
+        try {
+          attempts++;
+          await _signalingClient.connect(host, port, pin: pairingPin);
+          break;
+        } catch (connErr) {
+          final errStr = connErr.toString();
+          final isRouteError = errStr.contains('No route to host') ||
+              errStr.contains('113') ||
+              errStr.contains('Network is unreachable') ||
+              errStr.contains('101');
+          if (isRouteError && attempts < 3) {
+            debugPrint(
+              '[SenderWebRTC] Route error on attempt $attempts ($connErr). Re-binding Wi-Fi and retrying...',
+            );
+            await ForegroundServiceHelper.bindToWifiNetwork();
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+            continue;
+          }
+          rethrow;
+        }
+      }
       _stateController.add(SenderConnectionState.connectedSignaling);
 
       // Transmit stream source metadata so receiver configures UI

@@ -45,6 +45,7 @@ class MainActivity : FlutterActivity() {
                 setReferenceCounted(true)
                 acquire()
             }
+            bindProcessToWifiNetwork()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -98,8 +99,8 @@ class MainActivity : FlutterActivity() {
                     }
                     "bindToWifiNetwork" -> {
                         try {
-                            bindProcessToWifiNetwork()
-                            result.success(true)
+                            val bound = bindProcessToWifiNetwork()
+                            result.success(bound)
                         } catch (e: Exception) {
                             result.error("BIND_WIFI_FAILED", e.localizedMessage, null)
                         }
@@ -199,13 +200,28 @@ class MainActivity : FlutterActivity() {
 
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
-    private fun bindProcessToWifiNetwork() {
+    private fun bindProcessToWifiNetwork(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
-                val connectivityManager = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+                val connectivityManager = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
 
                 networkCallback?.let {
                     try { connectivityManager.unregisterNetworkCallback(it) } catch (_: Exception) {}
+                    networkCallback = null
+                }
+
+                // 1. Immediately find and bind to existing Wi-Fi network
+                var boundImmediately = false
+                val allNets = connectivityManager.allNetworks
+                for (network in allNets) {
+                    val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
+                    if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)) {
+                        if (connectivityManager.bindProcessToNetwork(network)) {
+                            android.util.Log.i("MainActivity", "Successfully bound process synchronously to Wi-Fi network: $network")
+                            boundImmediately = true
+                            break
+                        }
+                    }
                 }
 
                 val request = android.net.NetworkRequest.Builder()
@@ -218,6 +234,7 @@ class MainActivity : FlutterActivity() {
                         try {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                                 connectivityManager.bindProcessToNetwork(network)
+                                android.util.Log.i("MainActivity", "NetworkCallback onAvailable: bound to Wi-Fi network $network")
                             }
                         } catch (e: Exception) {
                             e.printStackTrace()
@@ -228,6 +245,7 @@ class MainActivity : FlutterActivity() {
                         try {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                                 connectivityManager.bindProcessToNetwork(null)
+                                android.util.Log.i("MainActivity", "NetworkCallback onLost: cleared process network binding")
                             }
                         } catch (e: Exception) {
                             e.printStackTrace()
@@ -236,10 +254,12 @@ class MainActivity : FlutterActivity() {
                 }
 
                 connectivityManager.requestNetwork(request, networkCallback!!)
+                return boundImmediately
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
+        return false
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

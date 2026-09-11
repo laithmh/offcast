@@ -131,7 +131,6 @@ void main() {
         final mandatory = video['mandatory'] as Map<String, dynamic>;
         expect(mandatory['maxWidth'], 720);
         expect(mandatory['maxHeight'], 1600);
-        expect(mandatory['minFrameRate'], 24);
         expect(mandatory['maxFrameRate'], 30);
 
         final coolConstraints = WebRTCConstants.getDisplayMediaConstraints(
@@ -141,7 +140,6 @@ void main() {
         final coolMandatory = coolVideo['mandatory'] as Map<String, dynamic>;
         expect(coolMandatory['maxWidth'], 540);
         expect(coolMandatory['maxHeight'], 1200);
-        expect(coolMandatory['minFrameRate'], 24);
         expect(coolMandatory['maxFrameRate'], 30);
       },
     );

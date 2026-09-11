@@ -150,11 +150,9 @@ class WebRTCConstants {
         'mandatory': {
           'maxWidth': preset.maxWidth,
           'maxHeight': preset.maxHeight,
-          'minFrameRate': 24,
           'maxFrameRate': preset.targetFps,
         },
         'optional': <dynamic>[
-          {'minFrameRate': 24},
           {'googCpuOveruseDetection': false},
           {'googCpuOveruseThreshold': 100},
           {'googHighpassFilter': false},
