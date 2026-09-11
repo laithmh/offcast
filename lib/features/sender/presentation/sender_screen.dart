@@ -201,13 +201,17 @@ class _SenderViewState extends State<_SenderView>
         return prev.status != curr.status ||
             prev.isAutoDiscovered != curr.isAutoDiscovered ||
             prev.discoveredDevice != curr.discoveredDevice ||
+            prev.pairingPin != curr.pairingPin ||
             prev.errorMessage != curr.errorMessage;
       },
       listener: (context, state) {
         if (state.isAutoDiscovered || state.discoveredDevice != null) {
           _ipController.text = state.targetHost;
           _portController.text = state.targetPort.toString();
-          if (state.pairingPin.isNotEmpty && _pinController.text.isEmpty) {
+          if (state.discoveredDevice?.pin != null &&
+              state.discoveredDevice!.pin!.isNotEmpty) {
+            _pinController.text = state.discoveredDevice!.pin!;
+          } else if (state.pairingPin.isNotEmpty && _pinController.text.isEmpty) {
             _pinController.text = state.pairingPin;
           }
         }

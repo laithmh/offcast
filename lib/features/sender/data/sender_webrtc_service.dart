@@ -126,9 +126,17 @@ class SenderWebRTCService {
         throw Exception('No display video track obtained.');
       }
 
-      // 3. Bind process to Wi-Fi network interface
+      // 3. Bind process to Wi-Fi network interface & warm up ARP table
       await ForegroundServiceHelper.bindToWifiNetwork();
       await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      // Quick UDP ping to prompt Linux/Android kernel to resolve ARP entry for target host
+      try {
+        final probeSocket =
+            await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+        probeSocket.send([0], InternetAddress(host), port);
+        probeSocket.close();
+      } catch (_) {}
 
       // 4. Connect to Receiver Signaling Server via WebSocket with route retry
       _stateController.add(SenderConnectionState.connectingSignaling);
@@ -148,12 +156,13 @@ class SenderWebRTCService {
               errStr.contains('101') ||
               errStr.contains('Connection refused') ||
               errStr.contains('111');
-          if (isRetryable && attempts < 4) {
+          if (isRetryable && attempts < 7) {
+            final delayMs = 500 + (attempts * 100);
             debugPrint(
-              '[SenderWebRTC] Connection attempt $attempts failed ($connErr). Retrying in 600ms...',
+              '[SenderWebRTC] Connection attempt $attempts failed ($connErr). Retrying in ${delayMs}ms...',
             );
             await ForegroundServiceHelper.bindToWifiNetwork();
-            await Future<void>.delayed(const Duration(milliseconds: 600));
+            await Future<void>.delayed(Duration(milliseconds: delayMs));
             continue;
           }
           rethrow;

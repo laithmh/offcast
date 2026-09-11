@@ -35,7 +35,10 @@ class EmbeddedSignalingServer {
 
   void updateRequiredPin(String? pin) {
     _requiredPin = pin;
-    debugPrint('[SignalingServer] Required pairing PIN updated: $_requiredPin');
+    _failedAttemptsByIp.clear();
+    debugPrint(
+      '[SignalingServer] Required pairing PIN updated: $_requiredPin (lockouts reset)',
+    );
   }
 
   bool _isIpLockedOut(String ip) {

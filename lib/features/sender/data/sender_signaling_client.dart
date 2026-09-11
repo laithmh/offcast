@@ -93,6 +93,48 @@ class SenderSignalingClient {
     } on SocketException catch (e) {
       debugPrint('[SignalingClient] SocketException during connect: $e');
       rethrow;
+    } on WebSocketException catch (e) {
+      debugPrint('[SignalingClient] WebSocketException during connect: $e');
+      final msg = e.message;
+      if (msg.contains('401') || msg.contains('403')) {
+        throw Exception(
+          'Unauthorized: Incorrect pairing PIN. Please verify the 4-digit PIN on the receiver screen.',
+        );
+      } else if (msg.contains('429')) {
+        throw Exception(
+          'Too many failed PIN attempts. Locked out for 30 seconds.',
+        );
+      }
+      // Probe status code via HTTP to confirm whether upgrade was rejected due to PIN
+      try {
+        final client = HttpClient();
+        final req = await client
+            .getUrl(
+              Uri.http(
+                '$host:$port',
+                '/ws',
+                (pin != null && pin.isNotEmpty) ? {'pin': pin} : null,
+              ),
+            )
+            .timeout(const Duration(seconds: 2));
+        final res = await req.close();
+        client.close();
+        if (res.statusCode == 401 || res.statusCode == 403) {
+          throw Exception(
+            'Unauthorized: Incorrect pairing PIN. Please verify the 4-digit PIN on the receiver screen.',
+          );
+        } else if (res.statusCode == 429) {
+          throw Exception(
+            'Too many failed PIN attempts. Locked out for 30 seconds.',
+          );
+        }
+      } catch (probeErr) {
+        if (probeErr.toString().contains('Unauthorized') ||
+            probeErr.toString().contains('Too many failed')) {
+          rethrow;
+        }
+      }
+      rethrow;
     } on HttpException catch (e) {
       debugPrint('[SignalingClient] HttpException during connect: $e');
       if (e.message.contains('401') || e.message.contains('403')) {
