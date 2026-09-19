@@ -184,4 +184,3 @@ class ReceiverPinSecurityToggled extends ReceiverEvent {
   @override
   List<Object?> get props => [isRequired];
 }
-

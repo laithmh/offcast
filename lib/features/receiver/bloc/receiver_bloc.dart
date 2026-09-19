@@ -29,8 +29,8 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     required this.signalingServer,
     required this.webrtcService,
     PrompterStorageService? storageService,
-  })  : storageService = storageService ?? PrompterStorageService(),
-        super(const ReceiverState()) {
+  }) : storageService = storageService ?? PrompterStorageService(),
+       super(const ReceiverState()) {
     on<ReceiverStartServerRequested>(_onStartServer);
     on<ReceiverStopServerRequested>(_onStopServer);
     on<ReceiverClientStatusChanged>(_onClientStatusChanged);
@@ -205,8 +205,9 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     ReceiverPinSecurityToggled event,
     Emitter<ReceiverState> emit,
   ) {
-    final pin =
-        state.pairingPin.isNotEmpty ? state.pairingPin : _generateSecurePin();
+    final pin = state.pairingPin.isNotEmpty
+        ? state.pairingPin
+        : _generateSecurePin();
     signalingServer.updateRequiredPin(event.isRequired ? pin : null);
     emit(state.copyWith(isPinRequired: event.isRequired, pairingPin: pin));
     if (state.localIp != null && state.status == ReceiverStatus.listening) {
@@ -434,10 +435,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     );
     storageService.saveActiveConfig(newConfig);
     emit(
-      state.copyWith(
-        isPrompterOverlayVisible: true,
-        prompterConfig: newConfig,
-      ),
+      state.copyWith(isPrompterOverlayVisible: true, prompterConfig: newConfig),
     );
   }
 
@@ -445,10 +443,12 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     try {
       final active = await storageService.loadActiveConfig();
       final scripts = await storageService.loadSavedScripts();
-      add(ReceiverPrompterStorageInitialized(
-        activeConfig: active,
-        savedScripts: scripts,
-      ));
+      add(
+        ReceiverPrompterStorageInitialized(
+          activeConfig: active,
+          savedScripts: scripts,
+        ),
+      );
     } catch (_) {}
   }
 
@@ -470,10 +470,7 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
   ) async {
     final updated = await storageService.saveScript(event.script);
     emit(
-      state.copyWith(
-        savedScripts: updated,
-        activeScriptId: event.script.id,
-      ),
+      state.copyWith(savedScripts: updated, activeScriptId: event.script.id),
     );
   }
 
@@ -489,8 +486,12 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
       isPlaying: false,
     );
     webrtcService.sendPrompterScriptUpdate(event.script.content);
-    webrtcService.sendPrompterCommand('set_speed', {'speedWpm': event.script.scrollSpeedWpm});
-    webrtcService.sendPrompterCommand('set_font_size', {'fontSize': event.script.fontSize});
+    webrtcService.sendPrompterCommand('set_speed', {
+      'speedWpm': event.script.scrollSpeedWpm,
+    });
+    webrtcService.sendPrompterCommand('set_font_size', {
+      'fontSize': event.script.fontSize,
+    });
     storageService.saveActiveConfig(updatedConfig);
     emit(
       state.copyWith(
@@ -509,7 +510,9 @@ class ReceiverBloc extends Bloc<ReceiverEvent, ReceiverState> {
     emit(
       state.copyWith(
         savedScripts: updated,
-        activeScriptId: state.activeScriptId == event.scriptId ? null : state.activeScriptId,
+        activeScriptId: state.activeScriptId == event.scriptId
+            ? null
+            : state.activeScriptId,
       ),
     );
   }

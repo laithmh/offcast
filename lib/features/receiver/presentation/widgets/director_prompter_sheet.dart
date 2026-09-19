@@ -431,7 +431,9 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
         backgroundColor: const Color(0xFF161B22),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          activeScript != null ? 'Update / Save Script' : 'Save to Script Library',
+          activeScript != null
+              ? 'Update / Save Script'
+              : 'Save to Script Library',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 16,
@@ -462,7 +464,10 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                  borderSide: const BorderSide(
+                    color: AppTheme.primary,
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -471,7 +476,10 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white60),
+            ),
           ),
           if (activeScript != null)
             OutlinedButton(
@@ -494,8 +502,8 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                     updatedAt: DateTime.now(),
                   );
                   context.read<ReceiverBloc>().add(
-                        ReceiverPrompterScriptSaved(newScript),
-                      );
+                    ReceiverPrompterScriptSaved(newScript),
+                  );
                   _applyScript();
                   Navigator.of(dialogCtx).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -521,7 +529,8 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
               final title = titleController.text.trim();
               if (title.isNotEmpty) {
                 final scriptToSave = SavedScript(
-                  id: activeScript?.id ??
+                  id:
+                      activeScript?.id ??
                       DateTime.now().millisecondsSinceEpoch.toString(),
                   title: title,
                   content: _scriptController.text,
@@ -530,8 +539,8 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                   updatedAt: DateTime.now(),
                 );
                 context.read<ReceiverBloc>().add(
-                      ReceiverPrompterScriptSaved(scriptToSave),
-                    );
+                  ReceiverPrompterScriptSaved(scriptToSave),
+                );
                 _applyScript();
                 Navigator.of(dialogCtx).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -650,9 +659,7 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white24,
-                      ),
+                      border: Border.all(color: Colors.white24),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
@@ -683,8 +690,8 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                 borderRadius: BorderRadius.circular(12),
                 onTap: () {
                   context.read<ReceiverBloc>().add(
-                        ReceiverPrompterScriptSelected(script),
-                      );
+                    ReceiverPrompterScriptSelected(script),
+                  );
                   _scriptController.text = script.content;
                   setState(() => _isEditing = false);
                 },
@@ -727,8 +734,8 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                         GestureDetector(
                           onTap: () {
                             context.read<ReceiverBloc>().add(
-                                  ReceiverPrompterScriptDeleted(script.id),
-                                );
+                              ReceiverPrompterScriptDeleted(script.id),
+                            );
                           },
                           child: const Icon(
                             Icons.close_rounded,
@@ -756,8 +763,8 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
           onChanged: (text) {
             if (!_isEditing) setState(() => _isEditing = true);
             context.read<ReceiverBloc>().add(
-                  ReceiverPrompterScriptDispatched(text),
-                );
+              ReceiverPrompterScriptDispatched(text),
+            );
             setState(() {});
           },
           decoration: InputDecoration(

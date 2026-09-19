@@ -101,7 +101,8 @@ class _NeumorphicButtonState extends State<NeumorphicButton> {
   @override
   Widget build(BuildContext context) {
     final isEnabled = widget.onPressed != null;
-    final baseColor = widget.backgroundColor ??
+    final baseColor =
+        widget.backgroundColor ??
         (widget.isPrimary ? AppTheme.primary : AppTheme.surface);
 
     return GestureDetector(
@@ -119,23 +120,24 @@ class _NeumorphicButtonState extends State<NeumorphicButton> {
           boxShadow: !isEnabled
               ? []
               : (_isDown
-                  ? [
-                      const BoxShadow(
-                        color: AppTheme.shadowDark,
-                        offset: Offset(2, 2),
-                        blurRadius: 4,
-                      ),
-                      const BoxShadow(
-                        color: AppTheme.shadowLight,
-                        offset: Offset(-2, -2),
-                        blurRadius: 4,
-                      ),
-                    ]
-                  : AppTheme.neumorphicShadowElevated),
+                    ? [
+                        const BoxShadow(
+                          color: AppTheme.shadowDark,
+                          offset: Offset(2, 2),
+                          blurRadius: 4,
+                        ),
+                        const BoxShadow(
+                          color: AppTheme.shadowLight,
+                          offset: Offset(-2, -2),
+                          blurRadius: 4,
+                        ),
+                      ]
+                    : AppTheme.neumorphicShadowElevated),
         ),
         child: DefaultTextStyle(
           style: TextStyle(
-            color: widget.textColor ??
+            color:
+                widget.textColor ??
                 (widget.isPrimary ? Colors.white : AppTheme.textPrimary),
             fontWeight: FontWeight.w700,
             fontSize: 15,
@@ -149,7 +151,8 @@ class _NeumorphicButtonState extends State<NeumorphicButton> {
                 Icon(
                   widget.icon,
                   size: 20,
-                  color: widget.textColor ??
+                  color:
+                      widget.textColor ??
                       (widget.isPrimary ? Colors.white : AppTheme.textPrimary),
                 ),
                 const SizedBox(width: 8),
@@ -209,19 +212,19 @@ class _NeumorphicIconButtonState extends State<NeumorphicIconButton> {
           boxShadow: !isEnabled
               ? []
               : (_isDown
-                  ? [
-                      const BoxShadow(
-                        color: AppTheme.shadowDark,
-                        offset: Offset(2, 2),
-                        blurRadius: 4,
-                      ),
-                      const BoxShadow(
-                        color: AppTheme.shadowLight,
-                        offset: Offset(-2, -2),
-                        blurRadius: 4,
-                      ),
-                    ]
-                  : AppTheme.neumorphicShadowElevated),
+                    ? [
+                        const BoxShadow(
+                          color: AppTheme.shadowDark,
+                          offset: Offset(2, 2),
+                          blurRadius: 4,
+                        ),
+                        const BoxShadow(
+                          color: AppTheme.shadowLight,
+                          offset: Offset(-2, -2),
+                          blurRadius: 4,
+                        ),
+                      ]
+                    : AppTheme.neumorphicShadowElevated),
         ),
         child: Center(
           child: Icon(

@@ -45,7 +45,9 @@ class EmbeddedSignalingServer {
     final attempts = _failedAttemptsByIp[ip];
     if (attempts == null) return false;
     final now = DateTime.now();
-    attempts.removeWhere((t) => now.difference(t) > const Duration(seconds: 30));
+    attempts.removeWhere(
+      (t) => now.difference(t) > const Duration(seconds: 30),
+    );
     return attempts.length >= 5;
   }
 
@@ -85,7 +87,8 @@ class EmbeddedSignalingServer {
         return;
       }
 
-      bool clientIsAuthenticated = _lastUpgradeAuthenticated ||
+      bool clientIsAuthenticated =
+          _lastUpgradeAuthenticated ||
           (_requiredPin == null || _requiredPin!.isEmpty);
       Timer? authTimer;
 
@@ -218,10 +221,7 @@ class EmbeddedSignalingServer {
             debugPrint(
               '[SignalingServer] 401 Unauthorized: Invalid PIN "$providedPin" from $clientIp',
             );
-            return Response(
-              401,
-              body: 'Unauthorized: Invalid pairing PIN',
-            );
+            return Response(401, body: 'Unauthorized: Invalid pairing PIN');
           } else {
             _resetFailedAttempts(clientIp);
             _lastUpgradeAuthenticated = true;

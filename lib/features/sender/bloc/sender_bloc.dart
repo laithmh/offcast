@@ -209,8 +209,6 @@ class SenderBloc extends Bloc<SenderEvent, SenderState> {
     emit(state.copyWith(streamSource: event.streamSource));
   }
 
-
-
   void _onPrompterScriptUpdated(
     SenderPrompterScriptUpdated event,
     Emitter<SenderState> emit,

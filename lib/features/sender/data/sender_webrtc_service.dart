@@ -49,8 +49,7 @@ class SenderWebRTCService {
   final List<RTCIceCandidate> _iceCandidateQueue = [];
   bool _hasRemoteDescription = false;
   String? _currentTargetHost;
-  StreamingQualityPreset _currentPreset =
-      StreamingQualityPreset.cool540p30;
+  StreamingQualityPreset _currentPreset = StreamingQualityPreset.cool540p30;
   CodecEngine _codecEngine = CodecEngine.h264;
   StreamSourceType _currentStreamSource = StreamSourceType.screen;
   Timer? _statsTimer;
@@ -99,8 +98,8 @@ class SenderWebRTCService {
         final errLower = e.toString().toLowerCase();
         if (Platform.isAndroid &&
             (errLower.contains('foreground service') ||
-             errLower.contains('media projection') ||
-             errLower.contains('securityexception'))) {
+                errLower.contains('media projection') ||
+                errLower.contains('securityexception'))) {
           debugPrint(
             '[SenderWebRTC] Transient Android MediaProjection timing glitch ($e). Retrying after 350ms...',
           );
@@ -132,8 +131,10 @@ class SenderWebRTCService {
 
       // Quick UDP ping to prompt Linux/Android kernel to resolve ARP entry for target host
       try {
-        final probeSocket =
-            await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+        final probeSocket = await RawDatagramSocket.bind(
+          InternetAddress.anyIPv4,
+          0,
+        );
         probeSocket.send([0], InternetAddress(host), port);
         probeSocket.close();
       } catch (_) {}
@@ -150,7 +151,8 @@ class SenderWebRTCService {
           break;
         } catch (connErr) {
           final errStr = connErr.toString();
-          final isRetryable = errStr.contains('No route to host') ||
+          final isRetryable =
+              errStr.contains('No route to host') ||
               errStr.contains('113') ||
               errStr.contains('Network is unreachable') ||
               errStr.contains('101') ||
@@ -188,7 +190,9 @@ class SenderWebRTCService {
       _peerConnection!.onIceConnectionState = (RTCIceConnectionState state) {
         debugPrint('[SenderWebRTC] ICE Connection State: $state');
         if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
-          _errorController.add('WebRTC ICE connection failed. Peer unreachable.');
+          _errorController.add(
+            'WebRTC ICE connection failed. Peer unreachable.',
+          );
           _stateController.add(SenderConnectionState.failed);
           _stopStatsPolling();
         }
@@ -199,8 +203,10 @@ class SenderWebRTCService {
         if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
           _stateController.add(SenderConnectionState.streaming);
           _startStatsPolling();
-        } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-            state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        } else if (state ==
+                RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+            state ==
+                RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
           _stateController.add(SenderConnectionState.failed);
           _stopStatsPolling();
         }
@@ -254,9 +260,7 @@ class SenderWebRTCService {
               candidate.sdpMid,
               candidate.sdpMLineIndex,
             );
-            _signalingClient.send(
-              SignalingMessage.candidate(fixedCandidate),
-            );
+            _signalingClient.send(SignalingMessage.candidate(fixedCandidate));
           }
         }
       };
@@ -290,8 +294,9 @@ class SenderWebRTCService {
                 RTCDegradationPreference.MAINTAIN_FRAMERATE;
             if (parameters.encodings != null &&
                 parameters.encodings!.isNotEmpty) {
-              final scaleDown =
-                  preset == StreamingQualityPreset.cool540p30 ? 2.0 : 1.5;
+              final scaleDown = preset == StreamingQualityPreset.cool540p30
+                  ? 2.0
+                  : 1.5;
               for (final encoding in parameters.encodings!) {
                 encoding.minBitrate = (preset.bitrateKbps * 0.7).toInt() * 1000;
                 encoding.maxBitrate = preset.bitrateKbps * 1000;
@@ -403,8 +408,8 @@ class SenderWebRTCService {
                       parameters.encodings!.isNotEmpty) {
                     final scaleDown =
                         _currentPreset == StreamingQualityPreset.cool540p30
-                            ? 2.0
-                            : 1.5;
+                        ? 2.0
+                        : 1.5;
                     for (final encoding in parameters.encodings!) {
                       encoding.maxBitrate = _currentPreset.bitrateKbps * 1000;
                       encoding.minBitrate =
@@ -561,8 +566,6 @@ class SenderWebRTCService {
       _stateController.add(SenderConnectionState.disconnected);
     }
   }
-
-
 
   void sendPrompterState(Map<String, dynamic> state) {
     _signalingClient.send(SignalingMessage.prompterStateSync(state));

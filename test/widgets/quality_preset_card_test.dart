@@ -45,10 +45,7 @@ void main() {
         find.text(StreamingQualityPreset.cool540p30.label),
         findsOneWidget,
       );
-      expect(
-        find.text(StreamingQualityPreset.hd720p30.label),
-        findsOneWidget,
-      );
+      expect(find.text(StreamingQualityPreset.hd720p30.label), findsOneWidget);
 
       expect(find.text('Video Codec Engine'), findsOneWidget);
       expect(find.text(CodecEngine.vp8.label), findsOneWidget);
@@ -78,10 +75,7 @@ void main() {
       await tester.tap(find.text(StreamingQualityPreset.hd720p30.label));
       await tester.pumpAndSettle();
 
-      expect(
-        senderBloc.state.preset,
-        equals(StreamingQualityPreset.hd720p30),
-      );
+      expect(senderBloc.state.preset, equals(StreamingQualityPreset.hd720p30));
 
       // Tap VP8 Safe
       await tester.tap(find.text(CodecEngine.vp8.label));

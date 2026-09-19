@@ -277,7 +277,10 @@ class ConnectedSenderView extends StatelessWidget {
                         Expanded(
                           child: Text(
                             'Tip: Dim screen to keep phone cool. Set hotspot to 5 GHz band for 2–5ms ultra-low latency.',
-                            style: TextStyle(color: Colors.white60, fontSize: 12),
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],

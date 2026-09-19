@@ -66,12 +66,15 @@ class SenderSignalingClient {
               final success = message.payload?['success'] as bool? ?? false;
               if (!success) {
                 final reason =
-                    message.payload?['reason'] as String? ?? 'Invalid pairing PIN';
+                    message.payload?['reason'] as String? ??
+                    'Invalid pairing PIN';
                 _errorController.add('Pairing failed: $reason');
                 disconnect();
                 return;
               } else {
-                debugPrint('[SignalingClient] In-band pairing auth confirmed by server.');
+                debugPrint(
+                  '[SignalingClient] In-band pairing auth confirmed by server.',
+                );
               }
             }
 

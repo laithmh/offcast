@@ -51,8 +51,7 @@ class WebRtcStatsCalculator {
             int.tryParse(values['framesEncoded']?.toString() ?? '') ?? 0;
         final bytesSent =
             int.tryParse(values['bytesSent']?.toString() ?? '') ?? 0;
-        final timeDelta =
-            now.difference(_lastTime).inMilliseconds / 1000.0;
+        final timeDelta = now.difference(_lastTime).inMilliseconds / 1000.0;
 
         if (timeDelta > 0) {
           if (_lastFrames > 0 && framesEncoded >= _lastFrames) {
@@ -83,8 +82,8 @@ class WebRtcStatsCalculator {
 
       if (report.type == 'candidate-pair' &&
           (values['nominated'] == true || values['state'] == 'succeeded')) {
-        final roundTripTime =
-            (values['currentRoundTripTime'] as num?)?.toDouble();
+        final roundTripTime = (values['currentRoundTripTime'] as num?)
+            ?.toDouble();
         if (roundTripTime != null && roundTripTime > 0 && rtt == 0) {
           rtt = (roundTripTime * 1000).toInt();
         }
@@ -122,8 +121,7 @@ class WebRtcStatsCalculator {
             int.tryParse(values['framesDecoded']?.toString() ?? '') ?? 0;
         final bytesReceived =
             int.tryParse(values['bytesReceived']?.toString() ?? '') ?? 0;
-        final timeDelta =
-            now.difference(_lastTime).inMilliseconds / 1000.0;
+        final timeDelta = now.difference(_lastTime).inMilliseconds / 1000.0;
 
         if (timeDelta > 0) {
           if (_lastFrames > 0 && framesDecoded >= _lastFrames) {
@@ -147,8 +145,8 @@ class WebRtcStatsCalculator {
 
       if (report.type == 'candidate-pair' &&
           (values['nominated'] == true || values['state'] == 'succeeded')) {
-        final roundTripTime =
-            (values['currentRoundTripTime'] as num?)?.toDouble();
+        final roundTripTime = (values['currentRoundTripTime'] as num?)
+            ?.toDouble();
         if (roundTripTime != null && roundTripTime > 0) {
           rtt = (roundTripTime * 1000).toInt();
         }

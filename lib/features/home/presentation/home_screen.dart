@@ -232,7 +232,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    isPrimary ? Icons.wifi_tethering_rounded : Icons.wifi_rounded,
+                    isPrimary
+                        ? Icons.wifi_tethering_rounded
+                        : Icons.wifi_rounded,
                     size: 13,
                     color: accentColor,
                   ),

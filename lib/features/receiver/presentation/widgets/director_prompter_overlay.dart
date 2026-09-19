@@ -80,9 +80,9 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
           (now - _lastProgressUpdateMs >= 250 &&
               (progress - widget.config.scrollProgress).abs() >= 0.02)) {
         _lastProgressUpdateMs = now;
-        context
-            .read<ReceiverBloc>()
-            .add(ReceiverPrompterProgressUpdated(progress));
+        context.read<ReceiverBloc>().add(
+          ReceiverPrompterProgressUpdated(progress),
+        );
       }
     }
   }
@@ -91,12 +91,12 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0.0);
     }
-    context
-        .read<ReceiverBloc>()
-        .add(const ReceiverPrompterProgressUpdated(0.0));
-    context
-        .read<ReceiverBloc>()
-        .add(const ReceiverPrompterCommandDispatched('rewind'));
+    context.read<ReceiverBloc>().add(
+      const ReceiverPrompterProgressUpdated(0.0),
+    );
+    context.read<ReceiverBloc>().add(
+      const ReceiverPrompterCommandDispatched('rewind'),
+    );
   }
 
   Future<void> _startVad() async {
@@ -104,7 +104,8 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
       final status = await Permission.microphone.request();
       if (!status.isGranted) {
         debugPrint(
-            '[DirectorPrompterOverlay] Microphone permission not granted');
+          '[DirectorPrompterOverlay] Microphone permission not granted',
+        );
         return;
       }
       _vadService ??= AudioVadService();
@@ -121,7 +122,9 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
         }
       });
     } catch (e) {
-      debugPrint('[DirectorPrompterOverlay] Failed to start VAD on receiver: $e');
+      debugPrint(
+        '[DirectorPrompterOverlay] Failed to start VAD on receiver: $e',
+      );
     }
   }
 
@@ -198,9 +201,9 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
       _scrollController.jumpTo(nextScroll);
     } else if (currentScroll >= maxScroll && maxScroll > 0) {
       // Reached the end of script
-      context
-          .read<ReceiverBloc>()
-          .add(const ReceiverPrompterCommandDispatched('pause'));
+      context.read<ReceiverBloc>().add(
+        const ReceiverPrompterCommandDispatched('pause'),
+      );
     }
   }
 
@@ -298,8 +301,7 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
             LinearProgressIndicator(
               value: widget.config.scrollProgress,
               backgroundColor: Colors.white10,
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(AppTheme.accent),
+              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.accent),
               minHeight: 2,
             ),
 
@@ -327,10 +329,26 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
                         letterSpacing: 0.2,
                         shadows: _isTransparentBackground
                             ? const [
-                                Shadow(blurRadius: 4.0, color: Colors.black, offset: Offset(1, 1)),
-                                Shadow(blurRadius: 10.0, color: Colors.black, offset: Offset(-1, -1)),
-                                Shadow(blurRadius: 20.0, color: Colors.black, offset: Offset(0, 2)),
-                                Shadow(blurRadius: 30.0, color: Colors.black, offset: Offset(0, 4)),
+                                Shadow(
+                                  blurRadius: 4.0,
+                                  color: Colors.black,
+                                  offset: Offset(1, 1),
+                                ),
+                                Shadow(
+                                  blurRadius: 10.0,
+                                  color: Colors.black,
+                                  offset: Offset(-1, -1),
+                                ),
+                                Shadow(
+                                  blurRadius: 20.0,
+                                  color: Colors.black,
+                                  offset: Offset(0, 2),
+                                ),
+                                Shadow(
+                                  blurRadius: 30.0,
+                                  color: Colors.black,
+                                  offset: Offset(0, 4),
+                                ),
                               ]
                             : null,
                       ),

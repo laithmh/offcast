@@ -49,10 +49,7 @@ class SignalingMessage {
   }
 
   factory SignalingMessage.auth({required String pin}) {
-    return SignalingMessage(
-      type: 'auth',
-      payload: {'pin': pin},
-    );
+    return SignalingMessage(type: 'auth', payload: {'pin': pin});
   }
 
   factory SignalingMessage.authResponse({

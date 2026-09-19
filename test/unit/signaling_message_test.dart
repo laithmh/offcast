@@ -237,7 +237,9 @@ void main() {
       expect(authDecoded?.payload?['pin'], '4829');
 
       final authRespSuccess = SignalingMessage.authResponse(success: true);
-      final respDecoded = SignalingMessage.deserialize(authRespSuccess.serialize());
+      final respDecoded = SignalingMessage.deserialize(
+        authRespSuccess.serialize(),
+      );
       expect(respDecoded?.type, 'auth_response');
       expect(respDecoded?.payload?['success'], true);
 
@@ -245,7 +247,9 @@ void main() {
         success: false,
         reason: 'Invalid pairing PIN',
       );
-      final failDecoded = SignalingMessage.deserialize(authRespFail.serialize());
+      final failDecoded = SignalingMessage.deserialize(
+        authRespFail.serialize(),
+      );
       expect(failDecoded?.type, 'auth_response');
       expect(failDecoded?.payload?['success'], false);
       expect(failDecoded?.payload?['reason'], 'Invalid pairing PIN');

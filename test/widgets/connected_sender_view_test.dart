@@ -21,52 +21,53 @@ void main() {
       await senderBloc.close();
     });
 
-    testWidgets('renders viewfinder broadcast view with clean telemetry and stop button', (
-      tester,
-    ) async {
-      bool stopped = false;
+    testWidgets(
+      'renders viewfinder broadcast view with clean telemetry and stop button',
+      (tester) async {
+        bool stopped = false;
 
-      const screenState = SenderState(
-        status: SenderConnectionState.streaming,
-        streamSource: StreamSourceType.screen,
-        targetHost: '192.168.43.1',
-        targetPort: 8080,
-      );
+        const screenState = SenderState(
+          status: SenderConnectionState.streaming,
+          streamSource: StreamSourceType.screen,
+          targetHost: '192.168.43.1',
+          targetPort: 8080,
+        );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: RepositoryProvider<SenderWebRTCService>.value(
-            value: webrtcService,
-            child: BlocProvider<SenderBloc>.value(
-              value: senderBloc,
-              child: ConnectedSenderView(
-                state: screenState,
-                onDisconnect: () => stopped = true,
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RepositoryProvider<SenderWebRTCService>.value(
+              value: webrtcService,
+              child: BlocProvider<SenderBloc>.value(
+                value: senderBloc,
+                child: ConnectedSenderView(
+                  state: screenState,
+                  onDisconnect: () => stopped = true,
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(find.text('SCREEN MIRRORING ACTIVE'), findsOneWidget);
-      expect(find.text('Broadcasting Viewfinder'), findsOneWidget);
-      expect(find.text('Target: 192.168.43.1:8080'), findsOneWidget);
-      expect(find.text('Stop Broadcast'), findsOneWidget);
-      expect(
-        find.text(
-          'Tip: Dim screen to keep phone cool. Set hotspot to 5 GHz band for 2–5ms ultra-low latency.',
-        ),
-        findsOneWidget,
-      );
+        expect(find.text('SCREEN MIRRORING ACTIVE'), findsOneWidget);
+        expect(find.text('Broadcasting Viewfinder'), findsOneWidget);
+        expect(find.text('Target: 192.168.43.1:8080'), findsOneWidget);
+        expect(find.text('Stop Broadcast'), findsOneWidget);
+        expect(
+          find.text(
+            'Tip: Dim screen to keep phone cool. Set hotspot to 5 GHz band for 2–5ms ultra-low latency.',
+          ),
+          findsOneWidget,
+        );
 
-      // Camera-specific legacy controls must be absent
-      expect(find.text('Switch to Front'), findsNothing);
-      expect(find.text('Switch to Rear'), findsNothing);
-      expect(find.text('Show Teleprompter on this display'), findsNothing);
+        // Camera-specific legacy controls must be absent
+        expect(find.text('Switch to Front'), findsNothing);
+        expect(find.text('Switch to Rear'), findsNothing);
+        expect(find.text('Show Teleprompter on this display'), findsNothing);
 
-      await tester.tap(find.text('Stop Broadcast'));
-      await tester.pumpAndSettle();
-      expect(stopped, isTrue);
-    });
+        await tester.tap(find.text('Stop Broadcast'));
+        await tester.pumpAndSettle();
+        expect(stopped, isTrue);
+      },
+    );
   });
 }

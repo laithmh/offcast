@@ -125,7 +125,10 @@ class DiscoveryBroadcaster {
 class DiscoveryListener {
   static const int broadcastPort = 8888;
   static const String serviceName = 'offcast';
-  static const Set<String> supportedServices = {'offcast', 'hotspot_screen_sharing'};
+  static const Set<String> supportedServices = {
+    'offcast',
+    'hotspot_screen_sharing',
+  };
 
   RawDatagramSocket? _socket;
   final StreamController<DiscoveredDevice> _deviceController =

@@ -114,16 +114,16 @@ class TargetHostCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: (state.clientIp != null
-                      ? AppTheme.primary
-                      : AppTheme.warning)
-                  .withValues(alpha: 0.08),
+              color:
+                  (state.clientIp != null ? AppTheme.primary : AppTheme.warning)
+                      .withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: (state.clientIp != null
-                        ? AppTheme.primary
-                        : AppTheme.warning)
-                    .withValues(alpha: 0.2),
+                color:
+                    (state.clientIp != null
+                            ? AppTheme.primary
+                            : AppTheme.warning)
+                        .withValues(alpha: 0.2),
                 width: 1,
               ),
             ),
@@ -190,7 +190,9 @@ class TargetHostCard extends StatelessWidget {
                 Expanded(
                   child: TextFormField(
                     controller: pinController,
-                    initialValue: pinController == null ? state.pairingPin : null,
+                    initialValue: pinController == null
+                        ? state.pairingPin
+                        : null,
                     keyboardType: TextInputType.number,
                     maxLength: 6,
                     style: const TextStyle(

@@ -32,8 +32,7 @@ enum CodecEngine {
 enum StreamingQualityPreset {
   cool540p30(
     label: 'Cool Viewfinder (540p 30 FPS)',
-    description:
-        'Ultra-low heat & stable battery for long continuous shoots (Recommended)',
+    description: 'Ultra-low heat & stable battery for long continuous shoots (Recommended)',
     targetFps: 30,
     maxWidth: 540,
     maxHeight: 1200,
@@ -184,4 +183,3 @@ class WebRTCConstants {
     'optional': <dynamic>[],
   };
 }
-

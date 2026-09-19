@@ -171,7 +171,9 @@ class ReceiverWaitingView extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.primary.withValues(alpha: 0.12),
+                                  color: AppTheme.primary.withValues(
+                                    alpha: 0.12,
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: const Icon(
@@ -230,7 +232,9 @@ class ReceiverWaitingView extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: state.pairingPin.split('').map((digit) {
                               return Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 6),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
                                 width: 44,
                                 height: 52,
                                 decoration: BoxDecoration(
@@ -238,7 +242,9 @@ class ReceiverWaitingView extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(14),
                                   boxShadow: AppTheme.neumorphicShadowSunken,
                                   border: Border.all(
-                                    color: AppTheme.primary.withValues(alpha: 0.35),
+                                    color: AppTheme.primary.withValues(
+                                      alpha: 0.35,
+                                    ),
                                     width: 1.2,
                                   ),
                                 ),

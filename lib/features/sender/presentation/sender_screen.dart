@@ -118,8 +118,7 @@ class _SenderViewState extends State<_SenderView>
     }
 
     // Validate local network connectivity
-    final clientIp =
-        bloc.state.clientIp ?? await NetworkHelper.getMyDeviceIp();
+    final clientIp = bloc.state.clientIp ?? await NetworkHelper.getMyDeviceIp();
     if (clientIp == null || clientIp.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -211,7 +210,8 @@ class _SenderViewState extends State<_SenderView>
           if (state.discoveredDevice?.pin != null &&
               state.discoveredDevice!.pin!.isNotEmpty) {
             _pinController.text = state.discoveredDevice!.pin!;
-          } else if (state.pairingPin.isNotEmpty && _pinController.text.isEmpty) {
+          } else if (state.pairingPin.isNotEmpty &&
+              _pinController.text.isEmpty) {
             _pinController.text = state.pairingPin;
           }
         }
@@ -548,17 +548,17 @@ class _SenderViewState extends State<_SenderView>
       onPressed: isBusy
           ? null
           : (hasWifi
-              ? _startSharing
-              : () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Please connect to the Receiver’s Wi-Fi Hotspot first.',
+                ? _startSharing
+                : () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Please connect to the Receiver’s Wi-Fi Hotspot first.',
+                        ),
+                        backgroundColor: AppTheme.warning,
                       ),
-                      backgroundColor: AppTheme.warning,
-                    ),
-                  );
-                }),
+                    );
+                  }),
       isPrimary: true,
       backgroundColor: isBusy
           ? AppTheme.primary.withValues(alpha: 0.75)
