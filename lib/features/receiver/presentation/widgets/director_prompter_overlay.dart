@@ -314,9 +314,11 @@ class _DirectorPrompterOverlayState extends State<DirectorPrompterOverlay>
                   SingleChildScrollView(
                     controller: _scrollController,
                     physics: const BouncingScrollPhysics(),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isCompact ? 16 : 24,
-                      vertical: 36,
+                    padding: EdgeInsets.only(
+                      left: isCompact ? 16 : 24,
+                      right: isCompact ? 16 : 24,
+                      top: 36,
+                      bottom: (viewportHeight * 0.65).clamp(70.0, 220.0),
                     ),
                     child: Text(
                       widget.config.scriptText,

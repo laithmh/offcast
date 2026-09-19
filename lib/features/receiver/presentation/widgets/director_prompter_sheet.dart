@@ -78,10 +78,16 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
       builder: (context, state) {
         final prompter = state.prompterConfig;
 
+        final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+        final bottomPadding = MediaQuery.of(context).padding.bottom;
+
         return Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
             child: Container(
+              padding: EdgeInsets.only(
+                bottom: bottomInset > 0 ? bottomInset : bottomPadding,
+              ),
               decoration: const BoxDecoration(
                 color: Color(0xFF13171F),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -150,9 +156,14 @@ class _DirectorPrompterSheetState extends State<DirectorPrompterSheet> {
                   // 3. Scrollable Controls Body
                   Flexible(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 16,
+                      physics: const BouncingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
+                      ),
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        16,
+                        20,
+                        24 + (bottomInset > 0 ? 8 : bottomPadding),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,

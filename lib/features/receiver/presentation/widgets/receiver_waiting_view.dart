@@ -25,11 +25,17 @@ class ReceiverWaitingView extends StatelessWidget {
     final hasNetwork = state.localIp != null;
     final wsUrl = 'ws://${state.localIp ?? "192.168.43.1"}:${state.port}';
 
+    final topPadding = MediaQuery.paddingOf(context).top + 76.0;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom + 32.0;
+
     return Container(
       color: AppTheme.background,
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(28.0),
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          padding: EdgeInsets.fromLTRB(24.0, topPadding, 24.0, bottomPadding),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: Column(

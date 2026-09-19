@@ -31,20 +31,27 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
+        bottom: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final screenWidth = constraints.maxWidth;
             final isTabletOrDesktop = screenWidth >= 640;
             final isCompact = screenWidth < 380;
+            final bottomInset = MediaQuery.paddingOf(context).bottom;
 
             final horizontalPadding = isCompact
                 ? 14.0
                 : (isTabletOrDesktop ? 32.0 : 20.0);
 
             return SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: horizontalPadding,
-                vertical: 20.0,
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                20.0,
+                horizontalPadding,
+                32.0 + bottomInset,
               ),
               child: Center(
                 child: ConstrainedBox(

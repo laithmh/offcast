@@ -303,59 +303,70 @@ class _SenderViewState extends State<_SenderView>
           ),
         ),
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 600;
-          final horizontalPadding = constraints.maxWidth < 380 ? 14.0 : 20.0;
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 600;
+            final horizontalPadding = constraints.maxWidth < 380 ? 14.0 : 20.0;
+            final bottomInset = MediaQuery.paddingOf(context).bottom;
 
-          return SingleChildScrollView(
-            padding: EdgeInsets.symmetric(
-              horizontal: horizontalPadding,
-              vertical: 16.0,
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildHeaderSection(),
-                      if (!_hasNotificationPermission) ...[
-                        const SizedBox(height: 16),
-                        _buildPermissionNotice(),
-                      ],
-                      const SizedBox(height: 20),
-                      TargetHostCard(
-                        state: state,
-                        scanPulseController: _scanPulseController,
-                        pinController: _pinController,
-                      ),
-                      const SizedBox(height: 20),
-                      QualityPresetCard(state: state, isWide: isWide),
-                      if (state.isBusy) ...[
-                        const SizedBox(height: 16),
-                        _buildConnectingStatusCard(state),
-                      ],
-                      const SizedBox(height: 24),
-                      _buildActionButtons(state),
-                      const SizedBox(height: 16),
-                      ManualIpOverrideCard(
-                        ipController: _ipController,
-                        portController: _portController,
-                        isExpanded: _showAdvancedSettings,
-                        onToggleExpanded: () => setState(
-                          () => _showAdvancedSettings = !_showAdvancedSettings,
+            return SingleChildScrollView(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                16.0,
+                horizontalPadding,
+                32.0 + bottomInset,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildHeaderSection(),
+                        if (!_hasNotificationPermission) ...[
+                          const SizedBox(height: 16),
+                          _buildPermissionNotice(),
+                        ],
+                        const SizedBox(height: 20),
+                        TargetHostCard(
+                          state: state,
+                          scanPulseController: _scanPulseController,
+                          pinController: _pinController,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 20),
+                        QualityPresetCard(state: state, isWide: isWide),
+                        if (state.isBusy) ...[
+                          const SizedBox(height: 16),
+                          _buildConnectingStatusCard(state),
+                        ],
+                        const SizedBox(height: 24),
+                        _buildActionButtons(state),
+                        const SizedBox(height: 16),
+                        ManualIpOverrideCard(
+                          ipController: _ipController,
+                          portController: _portController,
+                          isExpanded: _showAdvancedSettings,
+                          onToggleExpanded: () => setState(
+                            () =>
+                                _showAdvancedSettings = !_showAdvancedSettings,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
