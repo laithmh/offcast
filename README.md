@@ -10,14 +10,47 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/laithmh/offcast/releases/tag/v1.0.0%2B1">
+    <img src="https://img.shields.io/badge/Release-v1.0.0%2B1_APK_Download-brightgreen?style=for-the-badge&logo=android" alt="Download APK" />
+  </a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter" alt="Flutter" />
+  <img src="https://img.shields.io/badge/CI%2FCD-GitHub_Actions-2088FF?logo=githubactions&logoColor=white" alt="CI/CD" />
   <img src="https://img.shields.io/badge/WebRTC-Hardware_H.264-orange?logo=webrtc" alt="WebRTC" />
   <img src="https://img.shields.io/badge/Latency-%3C20ms-success" alt="Latency" />
   <img src="https://img.shields.io/badge/Framerate-Solid_30_FPS-blue" alt="Framerate" />
   <img src="https://img.shields.io/badge/Security-Pre--Shared_PIN_(PSP)-blue" alt="Security" />
   <img src="https://img.shields.io/badge/Offline-100%25_Direct_Hotspot-green" alt="Offline" />
   <img src="https://img.shields.io/badge/Storage-Persistent_Script_Library-purple" alt="Storage" />
+  <img src="https://img.shields.io/badge/Tests-50_Passed_(0_Warnings)-success" alt="Tests" />
   <img src="https://img.shields.io/badge/License-Showcase_%2F_All_Rights_Reserved-purple" alt="License" />
+</p>
+
+---
+
+## 📚 Complete Documentation Suite
+
+Explore the deep-dive documentation for engineering breakdowns, creator guides, and career evaluation:
+
+| Document | Focus Area | Description |
+| :--- | :--- | :--- |
+| 🛠️ [**Technical Architecture**](docs/TECHNICAL_ARCHITECTURE.md) | **Systems Engineering** | WebRTC SDP playout munging, in-process Kotlin UDP relay (`nice=-19`), Shelf signaling, and Audio VAD DSP. |
+| 🌟 [**Features Showcase**](docs/FEATURES_SHOWCASE.md) | **Product & Creators** | Viewfinder monitoring, draggable teleprompter, social framing grids (9:16 safe zones), and thermal profiles. |
+| 💼 [**Portfolio & CV Kit**](docs/PORTFOLIO_AND_CV.md) | **Recruiters & Leads** | Google XYZ resume bullets, skills matrix, Mermaid system architecture diagram, and technical interview Q&A. |
+| 🚀 [**CI/CD & Release Guide**](docs/CICD_AND_RELEASE_GUIDE.md) | **DevOps & Automation** | Dual GitHub Actions pipelines, automated APK releases on Git tags, and keystore secrets setup. |
+
+---
+
+## 📸 App Screenshots
+
+<p align="center">
+  <img src="asset/screenshots/01_mode_selection.jpg" width="31%" alt="Mode Selection Screen" />
+  &nbsp;
+  <img src="asset/screenshots/02_receiver_pairing.jpg" width="31%" alt="Director Monitor & Security PIN" />
+  &nbsp;
+  <img src="asset/screenshots/03_sender_config.jpg" width="31%" alt="Sender Config & Quality Presets" />
 </p>
 
 ---
@@ -73,7 +106,7 @@ OffCast solves this completely:
 
 ### 🔄 Android SoftAP Hotspot AP-Isolation Bypass
 - **Native In-Process UDP Relay (`LocalUdpRelay`)**: Solves Android's tethering packet-filtering issue where connected hotspot clients cannot communicate directly with each other.
-- Pipes datagrams through a native OS background thread with a 2MB socket buffer.
+- Pipes datagrams through a native OS background thread with a 2MB socket buffer at `nice = -19` priority.
 
 ---
 
@@ -89,7 +122,7 @@ OffCast solves this completely:
 
 ---
 
-## 🏗️ Technical Architecture
+## 🏗️ Technical Architecture Overview
 
 ```text
        CAMERA PHONE (TRANSMITTER)                       DIRECTOR TABLET (RECEIVER)
@@ -115,23 +148,27 @@ OffCast solves this completely:
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting Started & Installation
+
+### 📥 Download & Install
+Download the pre-compiled Android release APK directly:
+👉 [**Download OffCast v1.0.0+1 APK**](https://github.com/laithmh/offcast/releases/tag/v1.0.0%2B1)
 
 ### 1. Connect Devices Over Hotspot
-1. Turn on **Personal / Portable Hotspot** on your Tablet or Phone.
+1. Turn on **Personal / Portable Hotspot** on your Tablet or Phone (preferably 5 GHz).
 2. Connect the other device to this Wi-Fi network.
    *(No mobile data, cellular reception, or internet connection required!)*
 
 ### 2. Start Director Monitor (Receiver / Tablet)
 1. Open **OffCast** on your tablet and tap **Director Monitor & Prompter**.
-2. The screen will display the connection address (e.g. `ws://192.168.43.1:8080`) and a **4-digit PIN**.
+2. The screen displays the connection address (e.g. `ws://192.168.0.104:8080`) and a **4-digit PIN**.
 3. Mount the tablet directly under or beside your camera tripod.
 
 ### 3. Start Camera Transmitter (Sender / Phone)
 1. Open **OffCast** on your camera phone and tap **Camera Viewfinder Transmitter**.
 2. Tap the auto-discovered Director Monitor (or enter IP and PIN).
-3. Tap **Start Viewfinder Broadcast**.
-4. Switch to your phone's **native Camera app** and start recording!
+3. Select your quality preset (**Cool Viewfinder** or **HD Viewfinder**) and tap **Start Viewfinder Broadcast**.
+4. Switch to your phone's **native Camera app** and start recording in full 4K!
 
 ---
 
@@ -143,9 +180,14 @@ offcast/
 │   └── app/src/main/kotlin/com/laithmh/offcast/
 │       ├── MainActivity.kt            # Platform channels & multicast locks
 │       ├── MediaProjectionService.kt  # Foreground capture service
-│       ├── AudioVadEngine.kt          # Native Voice Activity Detection
-│       └── NativeUdpRelay.kt          # Low-latency SoftAP socket relay
+│       ├── AudioVadEngine.kt          # Native Voice Activity Detection (PCM-16 RMS)
+│       └── NativeUdpRelay.kt          # Low-latency SoftAP socket relay (nice=-19)
 ├── asset/                     # Branded logo and application assets
+│   └── screenshots/           # High-resolution production UI captures
+├── docs/                      # Comprehensive technical and portfolio documentation
+│   ├── TECHNICAL_ARCHITECTURE.md      # Low-level systems engineering deep dive
+│   ├── FEATURES_SHOWCASE.md           # Creator feature walkthrough & problem-solution
+│   └── PORTFOLIO_AND_CV.md            # Resume bullets, interview Q&A, & skills matrix
 ├── lib/
 │   ├── core/                  # Design tokens, theme, constants, & models
 │   │   ├── constants/         # WebRTC presets (540p30 / 720p30)
